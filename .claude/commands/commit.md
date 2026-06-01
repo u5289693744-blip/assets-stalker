@@ -1,4 +1,4 @@
-Przeanalizuj zmiany w projekcie i wykonaj commit.
+Przeanalizuj zmiany w projekcie, wykonaj commit i wyślij je na GitHub.
 
 1. Uruchom `git diff` i `git status`, żeby zobaczyć wszystkie zmodyfikowane pliki.
 
@@ -8,4 +8,10 @@ Przeanalizuj zmiany w projekcie i wykonaj commit.
 
 4. Dodaj wszystkie zmienione pliki do commitu i wykonaj go.
 
-5. Powiedz użytkownikowi, co zostało zapisane — jednym zdaniem.
+5. Wyślij commit na GitHub, żeby zmiany były tam widoczne:
+   - Sprawdź, czy projekt ma skonfigurowane zdalne repozytorium: `git remote`.
+   - Jeśli żadnego nie ma, nie próbuj wysyłać — poinformuj użytkownika, że projekt nie jest połączony z GitHubem, i na tym zakończ.
+   - Jeśli jest, wyślij bieżącą gałąź poleceniem `git push -u origin HEAD`. To działa zarówno przy pierwszym wysłaniu (ustanawia połączenie z gałęzią na GitHubie), jak i przy kolejnych.
+   - Jeśli wysyłka się nie powiedzie (np. brak dostępu albo uprawnień), pokaż użytkownikowi treść błędu prostym językiem i nie udawaj, że się udało.
+
+6. Powiedz użytkownikowi, co zostało zapisane i czy trafiło na GitHub — jednym, najwyżej dwoma zdaniami.

@@ -1,0 +1,18 @@
+# Zaleznosci
+node_modules
+
+# Pliki budowania
+dist
+dist-ssr
+
+# Logi
+*.log
+npm-debug.log*
+
+# Pliki srodowiskowe
+.env
+.env.local
+
+# Pliki systemowe / edytora
+.DS_Store
+*.local

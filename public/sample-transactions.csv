@@ -1,0 +1,31 @@
+date;ticker;name;type;action;quantity;price;currency;broker;comment
+2023-01-10 09:30:00;AAPL;Apple Inc.;stock;buy;10;130.50;USD;Interactive Brokers;Pierwszy zakup
+2023-02-15 10:15:00;MSFT;Microsoft Corporation;stock;buy;5;255.20;USD;Interactive Brokers;
+2023-03-02 14:00:00;NVDA;NVIDIA Corporation;stock;buy;8;230.10;USD;Interactive Brokers;
+2023-03-20 11:45:00;VWCE;Vanguard FTSE All-World UCITS ETF;etf;buy;12;98.30;EUR;XTB;Wpłata miesięczna
+2023-04-05 09:00:00;BTC;Bitcoin;crypto;buy;0.05;28000.00;USD;Binance;
+2023-04-18 16:20:00;TSLA;Tesla Inc.;stock;buy;6;185.00;USD;Revolut;
+2023-05-09 10:05:00;EUNL;iShares Core MSCI World UCITS ETF;etf;buy;20;75.40;EUR;XTB;
+2023-05-25 13:30:00;AAPL;Apple Inc.;stock;buy;5;172.10;USD;Interactive Brokers;Dokupienie
+2023-06-12 09:40:00;ETH;Ethereum;crypto;buy;1.2;1800.00;USD;Binance;
+2023-06-30 15:00:00;EDO;Obligacje skarbowe 10-letnie EDO;bond;buy;30;100.00;PLN;PKO Obligacje;Emisja czerwcowa
+2023-07-14 11:10:00;NVDA;NVIDIA Corporation;stock;buy;4;460.00;USD;Interactive Brokers;Dokupienie
+2023-08-01 10:00:00;VWCE;Vanguard FTSE All-World UCITS ETF;etf;buy;10;102.10;EUR;XTB;Wpłata miesięczna
+2023-08-22 14:25:00;SXR8;iShares Core S&P 500 UCITS ETF;etf;buy;3;430.00;EUR;XTB;
+2023-09-05 09:35:00;TSLA;Tesla Inc.;stock;sell;3;245.00;USD;Revolut;Realizacja części zysku
+2023-09-19 16:00:00;AMZN;Amazon.com Inc.;stock;buy;7;138.20;USD;Interactive Brokers;
+2023-10-03 10:45:00;COI;Obligacje skarbowe 4-letnie COI;bond;buy;25;100.00;PLN;PKO Obligacje;Indeksowane inflacją
+2023-10-20 13:15:00;BTC;Bitcoin;crypto;buy;0.03;29500.00;USD;Kraken;Dokupienie
+2023-11-08 09:55:00;AAPL;Apple Inc.;stock;sell;4;182.50;USD;Interactive Brokers;Sprzedaż części
+2023-11-27 11:30:00;GOOGL;Alphabet Inc.;stock;buy;9;135.60;USD;Interactive Brokers;
+2023-12-11 15:40:00;ETH;Ethereum;crypto;sell;0.5;2200.00;USD;Binance;
+2024-01-09 10:10:00;VWCE;Vanguard FTSE All-World UCITS ETF;etf;sell;8;108.50;EUR;XTB;
+2024-01-23 14:05:00;EDO;Obligacje skarbowe 10-letnie EDO;bond;buy;20;100.00;PLN;PKO Obligacje;Emisja styczniowa
+2024-02-06 09:45:00;NVDA;NVIDIA Corporation;stock;sell;5;680.00;USD;Interactive Brokers;Realizacja zysku
+2024-02-20 11:20:00;MSFT;Microsoft Corporation;stock;buy;4;405.00;USD;Interactive Brokers;
+2024-03-05 16:10:00;BTC;Bitcoin;crypto;sell;0.02;63000.00;USD;Binance;Częściowa sprzedaż
+2024-03-19 10:30:00;SOL;Solana;crypto;buy;15;180.00;USD;Kraken;
+2024-04-02 13:50:00;EUNL;iShares Core MSCI World UCITS ETF;etf;buy;10;88.20;EUR;XTB;Wpłata miesięczna
+2024-04-16 09:25:00;AAPL;Apple Inc.;stock;buy;6;168.40;USD;Interactive Brokers;Dokupienie
+2024-05-07 14:40:00;TSLA;Tesla Inc.;stock;sell;3;178.00;USD;Revolut;Zamknięcie pozycji
+2024-05-21 10:55:00;COI;Obligacje skarbowe 4-letnie COI;bond;buy;15;100.00;PLN;PKO Obligacje;Emisja majowa
