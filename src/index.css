@@ -6,6 +6,7 @@
   --muted: #94a3b8;
   --accent: #38bdf8;
   --sell: #f87171;
+  --gain: #4ade80;
   --border: #334155;
 }
 
@@ -112,6 +113,37 @@ header h1 {
   font-size: 0.85rem;
 }
 
+/* Panel podsumowania portfela — 5 kart z kluczowymi liczbami */
+.summary-portfolio {
+  margin-bottom: 1.5rem;
+}
+
+.summary-portfolio .summary-card {
+  flex: 1;
+  min-width: 160px;
+}
+
+.summary-portfolio .summary-value {
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+  /* Domyślny kolor nadpisywany przez .gain / .loss jeśli potrzeba */
+}
+
+.summary-portfolio .summary-value.gain {
+  color: var(--gain);
+}
+
+.summary-portfolio .summary-value.loss {
+  color: var(--sell);
+}
+
+.summary-tooltip {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-top: 0.35rem;
+  line-height: 1.4;
+}
+
 .note {
   background: var(--panel);
   border-left: 3px solid var(--accent);
@@ -165,4 +197,182 @@ header h1 {
 
 .transactions tbody tr:hover td {
   background: var(--panel-2);
+}
+
+/* ─── Klasy zysku i straty ─────────────────────────────────────── */
+.gain { color: var(--gain); }
+.loss { color: var(--sell); }
+
+/* ─── Pasek postępu pobierania cen ─────────────────────────────── */
+.price-progress {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.price-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.price-progress-label {
+  color: var(--muted);
+}
+
+.price-progress-counts {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.price-progress-bar-bg {
+  height: 6px;
+  background: var(--panel-2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.price-progress-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.price-progress-failed {
+  color: var(--sell);
+  font-size: 0.85rem;
+  margin: 0.5rem 0 0;
+}
+
+/* ─── Portfel — struktura brokerów ──────────────────────────────── */
+.portfolio {
+  margin-top: 2rem;
+}
+
+.portfolio-header {
+  display: flex;
+  align-items: baseline;
+  gap: 1.5rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.portfolio-header h2 {
+  margin: 0;
+  font-size: 1.3rem;
+  color: var(--text);
+}
+
+.portfolio-total {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.portfolio-total strong {
+  color: var(--text);
+}
+
+.portfolio-note {
+  margin-bottom: 1.25rem;
+}
+
+.broker-section {
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.broker-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--panel);
+  border: none;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 0.8rem 1.1rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.broker-header:hover {
+  background: var(--panel-2);
+}
+
+.broker-chevron {
+  color: var(--accent);
+  font-size: 0.9rem;
+  width: 1em;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.broker-name {
+  flex: 1;
+}
+
+.broker-summary {
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.broker-pnl {
+  font-weight: 600;
+}
+
+.broker-positions {
+  overflow-x: auto;
+}
+
+/* ─── Tabela portfela ──────────────────────────────────────────── */
+.portfolio-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  background: var(--panel);
+}
+
+.portfolio-table th,
+.portfolio-table td {
+  text-align: left;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.portfolio-table th {
+  background: var(--panel-2);
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.portfolio-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.portfolio-table tbody tr:hover td {
+  background: var(--panel-2);
+}
+
+.portfolio-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.position-name {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-weight: 400;
+  margin-top: 1px;
 }
