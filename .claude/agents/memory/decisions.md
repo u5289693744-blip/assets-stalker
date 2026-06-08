@@ -114,6 +114,19 @@ Zawiera kluczowe decyzje podjęte podczas budowania aplikacji.
   dostaje akceptowany podpis niezależnie od przeglądarki użytkownika. Zmiana proxy wymaga
   RESTARTU `npm run dev`.
 
+- **2026-06-08** — Weryfikacja ceny transakcji NVDA pokazywała fałszywą czerwoną kropkę.
+  Przyczyna: `fetchTransactionPrices.js` pobierało dzienne świece (i zdarzenia splitów)
+  tylko w oknie od pierwszej do ostatniej transakcji danego aktywa. Yahoo zwraca splity
+  WYŁĄCZNIE z okresu zapytania, a split NVDA 10:1 nastąpił 2024-06-10 — PO ostatniej
+  transakcji NVDA (2024-02-06). Skutek: `events.splits` puste → `splitFactor = 1` → brak
+  korekty → porównanie 230,10 USD (wpisane) z ~23 USD (skorygowane przez Yahoo) → czerwona.
+  Potwierdzone zapytaniami do API: okno do 2024-02 → 0 splitów; okno do dziś → split 10:1.
+  **Naprawa:** `maxUnix` rozszerzone z „ostatnia transakcja + 5 dni" do „dziś"
+  (`Math.floor(Date.now() / 1000)`), więc okno zawsze obejmuje wszystkie późniejsze splity.
+  Dodatkowe świece są nieszkodliwe (findNearestCandle dopasowuje tylko świece blisko daty
+  transakcji). Zweryfikowano: NVDA 2023-03-02 świeca ×10 ≈ 224–234 USD → 230,10 mieści się
+  → zielona. Wykryte przez skilla debug-ticker przed udostępnieniem funkcji.
+
 ---
 
 ## Wykresy — implementacja (2026-06-03)
@@ -228,6 +241,98 @@ Zawiera kluczowe decyzje podjęte podczas budowania aplikacji.
   `AllocationPie.jsx`, `ValueVsInvested.jsx`, `DividendsBar.jsx`, `index.css`.
 - Wyjątek: kolumna „Cena zakupu" w `PortfolioTable` nadal pokazuje walutę natywną transakcji — celowa decyzja.
 - Wykres `AllocationAreaOverTime` bez zmian — operuje wyłącznie na procentach.
+
+## Obszar wczytywania CSV — rozbudowa (2026-06-08)
+
+- **Kształt błędów parsera:** `parseTransactions` zwraca teraz błędy jako obiekty
+  `{ line, field, message }` zamiast prostych stringów. Pole `field` to klucz
+  (np. `date`, `ticker`, `quantity`) używany przez `App.jsx` do grupowania.
+  Wyjątek: błąd złego separatora ma `field: 'separator'` i `line: 1`.
+- **Nowe reguły walidacji w parseTransactions:**
+  - `date`: wzorzec `RRRR-MM-DD GG:MM:SS` + sprawdzenie sensowności daty.
+  - `quantity`: musi być > 0 (poprzednio akceptowano 0 i ujemne).
+  - `price`: musi być >= 0 (poprzednio akceptowano ujemne).
+  - `currency`: dokładnie trzy litery alfabetu.
+  - Wczesne wykrycie złego separatora: jeśli pierwsza linia nie ma `;` ale ma `,`
+    → zwracany jest błąd separatora zanim PapaParse spróbuje parsować.
+- **FileLoader — sygnatura zmieniona:** prop `onFileText(text)` zastąpiony przez
+  `onFile(text, fileName)`. App.jsx używa `fileName` jako etykiety źródła
+  (zamiast stałego „własny plik"). Dla przykładu nadal etykieta stała.
+- **FileLoader — drag & drop:** obszar `.file-loader` reaguje na zdarzenia
+  dragenter/dragover/dragleave/drop. Klasa `.dragover` podświetla obszar podczas
+  przeciągania. preventDefault na dragover konieczny do działania drop.
+- **FileLoader — walidacja pliku przed parsowaniem:**
+  - odrzuca pliki bez rozszerzenia `.csv`,
+  - odrzuca puste pliki (file.size === 0),
+  - błąd wyświetlany w `.file-error` (pasek przy obszarze, bez zmiany sekcji errors).
+- **Pogrupowane błędy w App.jsx:** komponent `ErrorGroups` grupuje obiekty błędów
+  po polu i wyświetla: „Rodzaj błędu — N wierszy (5, 8, 12)". Nagłówek
+  „Wiersze pominięte (N)" zachowany. Błąd separatora wyświetlany oddzielnie.
+
+## Historia dywidend w tabeli portfela (2026-06-08)
+
+- **fetchAllDividends** zwraca teraz obiekt `{ byYear, byTicker }` zamiast samej tablicy.
+  - `byYear` — tablica roczna (do wykresu słupkowego `DividendsBar`), bez zmian w kształcie.
+  - `byTicker` — słownik `{ [ticker]: [{ dateStr, heldQty, amountPerUnitUSD, totalUSD }] }`,
+    szczegółowe wypłaty per ticker do modala historii.
+- `DividendsBar` zaktualizowany: odczytuje `dividends?.byYear ?? dividends` (obsługuje obie
+  struktury dla bezpieczeństwa).
+- `PortfolioTable` przyjmuje nowy prop `dividendsByTicker` i przekazuje go do `BrokerSection`.
+  W każdym wierszu tabeli tickery z dywidendami (tickerDivs?.length > 0) mają dodatkowy
+  przycisk "Dywidendy". Kliknięcie otwiera `DividendHistoryModal`.
+- `DividendHistoryModal` — wyświetla wypłaty pogrupowane po miesiącu (malejąco), dla każdej
+  wypłaty: data, posiadane jednostki w dniu wypłaty, kwota na jednostkę, łączna kwota.
+  Zamykanie: przycisk X, kliknięcie tła, klawisz Escape. Kwoty w walucie wyświetlania
+  (identycznie jak reszta tabeli: rate × USD).
+- `amountPerUnitUSD` = dywidenda na jedną akcję/jednostkę w USD (już przeliczona z EUR jeśli
+  dotyczy ETF-ów europejskich). `totalUSD = amountPerUnitUSD × heldQty`.
+- `heldQty` w wypłacie = stan posiadania obliczony z transakcji buy/sell do dnia wypłaty
+  (istniejąca funkcja `heldQtyAtDate`). Nie ma związku z obecną ilością w portfelu.
+- Źródło dywidend: wyłącznie Yahoo Finance (nie CSV). Format CSV nie zawiera dywidend
+  w przykładowym pliku — ta funkcja jest niezależna od formatu CSV.
+
+## Modal historii transakcji i weryfikacja cen (2026-06-08)
+
+- **Nowa funkcja:** przycisk „Historia" w każdym wierszu tabeli portfela otwiera modal
+  z pełną listą transakcji (kupno/sprzedaż/dywidenda) dla danego aktywa u danego brokera.
+  Modal posortowany chronologicznie; przy każdej transakcji kupna/sprzedaży wyświetlana
+  kolorowa kropka weryfikacji ceny.
+
+- **Endpoint weryfikacji:** Yahoo Finance `/v8/finance/chart/<SYMBOL>?period1=<unix>&period2=<unix>&interval=1d&events=split`
+  (przez proxy `/api/yahoo`). Pobieramy dzienne świece dla całego zakresu dat transakcji
+  danego aktywa (jednorazowo per otwarcie modala, nie per transakcja). Pole `events.splits`
+  dostarcza listę splitów z datami i współczynnikami.
+
+- **Korekta o splity akcji (kluczowa decyzja):** Yahoo zwraca ceny historyczne SKORYGOWANE
+  o późniejsze splity. NVDA split 10:1 (2024-06-10): transakcje sprzed splitu wpisane po
+  ~230–680 USD, Yahoo zwraca ~23–68 USD. Rozwiązanie: dla każdej transakcji mnoż ceny
+  Yahoo przez `splitFactor` = iloczyn (numerator/denominator) wszystkich splitów z datą
+  PÓŹNIEJSZĄ niż data transakcji. Dla transakcji NVDA z 2023 factor=10, więc świeca
+  Yahoo ×10 ≈ cena oryginalna → zielona kropka zamiast fałszywej czerwonej.
+
+- **Waluta porównania (świadomy wyjątek od zasady walutowej projektu):**
+  Weryfikacja cen porównuje cenę użytkownika w walucie notowania aktywa (z `meta.currency`):
+  - akcje USA i krypto: USD ↔ USD (porównanie wprost)
+  - europejskie ETF-y: EUR ↔ EUR (porównanie wprost, bez przeliczania na USD)
+  Wyjątek: waluta transakcji ≠ waluta notowania → szara kropka.
+  To celowe odstępstwo od zasady USD-w-obliczeniach, bo dotyczy weryfikacji danych wejściowych
+  (nie obliczeń portfela) i pozwala uniknąć szumu kursowego.
+
+- **Próg tolerancji:** dwustopniowy:
+  1. Cena w zakresie [low, high] dnia → zielona (realna cena śróddzienna).
+  2. Poza zakresem: odchylenie od granicy ≤ 15% → zielona (prowizje, zaokrąglenia, sąsiedni dzień).
+     Powyżej 15% → czerwona. Bufor 15% dobrany empirycznie — brak fałszywych alarmów
+     na przykładowym pliku po korekcie splitów.
+
+- **Szara kropka (brak danych) dla:** obligacje (EDO, COI), gotówka, metale szlachetne
+  (yahooSymbol zwraca null), błąd sieci, dywidendy (nie weryfikowane), brak notowań
+  w ±5 dniach od daty transakcji.
+
+- **Architektura:** nowy plik `src/lib/history/fetchTransactionPrices.js` (logika pobierania
+  i weryfikacji). Nowy komponent `src/components/TransactionHistoryModal.jsx` (modal).
+  `PortfolioTable` przyjmuje nowy prop `transactions` (przekazywany z `App.jsx`).
+  `BrokerSection` filtruje transakcje po ticker + broker → pokazuje dokładnie historię
+  wiersza z tabeli portfela.
 
 ## Niezmienniki finansowe (krytyczne — nie łamać)
 

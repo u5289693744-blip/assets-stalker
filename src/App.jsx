@@ -15,6 +15,60 @@ import ChartsSection from './components/ChartsSection.jsx'
 // Ścieżka do przykładowego pliku dołączonego do aplikacji (folder public).
 const SAMPLE_URL = `${import.meta.env.BASE_URL}sample-transactions.csv`
 
+// Polskie etykiety dla każdego rodzaju pola z błędem.
+const FIELD_LABELS = {
+  date:      'Nieprawidłowa data',
+  ticker:    'Brak symbolu (ticker)',
+  type:      'Nieznany typ aktywa',
+  action:    'Nieznana operacja',
+  quantity:  'Nieprawidłowa ilość',
+  price:     'Nieprawidłowa cena',
+  currency:  'Nieprawidłowa waluta',
+  separator: 'Zły separator w pliku',
+}
+
+/**
+ * Grupuje listę błędów (obiektów { line, field, message }) według pola/rodzaju
+ * i wyświetla zbiorczą informację: „Rodzaj błędu — N wierszy (5, 8, 12)".
+ */
+function ErrorGroups({ errors }) {
+  // Błąd separatora to wyjątek — nie ma numeru wiersza, pokazujemy go osobno.
+  const separatorError = errors.find((e) => e.field === 'separator')
+  const rowErrors = errors.filter((e) => e.field !== 'separator')
+
+  // Grupujemy pozostałe błędy po polu.
+  const groups = {}
+  for (const err of rowErrors) {
+    const key = err.field
+    if (!groups[key]) groups[key] = []
+    groups[key].push(err.line)
+  }
+
+  return (
+    <ul className="errors-list">
+      {separatorError && (
+        <li className="error-group">
+          <span className="error-group-label">
+            {FIELD_LABELS['separator'] ?? 'Problem z plikiem'}
+          </span>
+          {' — '}
+          <span className="error-group-detail">{separatorError.message}</span>
+        </li>
+      )}
+      {Object.entries(groups).map(([field, lines]) => (
+        <li key={field} className="error-group">
+          <span className="error-group-label">
+            {FIELD_LABELS[field] ?? field}
+          </span>
+          {' — '}
+          <span className="error-group-count">{lines.length} {lines.length === 1 ? 'wiersz' : lines.length < 5 ? 'wiersze' : 'wierszy'}</span>
+          <span className="error-group-lines"> (wiersz: {lines.join(', ')})</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 const CURRENCY_KEY = 'asset-stalker.currency'
 
 export default function App() {
@@ -251,7 +305,7 @@ export default function App() {
 
       <section className="controls">
         <FileLoader
-          onFileText={(text) => loadCsvText(text, 'własny plik')}
+          onFile={(text, fileName) => loadCsvText(text, fileName)}
           onLoadSample={loadSample}
         />
         <div className="currency-selector">
@@ -277,11 +331,8 @@ export default function App() {
       {errors.length > 0 && (
         <section className="errors">
           <h2>Wiersze pominięte ({errors.length})</h2>
-          <ul>
-            {errors.map((e, i) => (
-              <li key={i}>{e}</li>
-            ))}
-          </ul>
+          {/* Grupujemy błędy według pola/rodzaju problemu i pokazujemy numery wierszy. */}
+          <ErrorGroups errors={errors} />
         </section>
       )}
 
@@ -320,7 +371,13 @@ export default function App() {
 
       {/* Główny widok: portfel pogrupowany po brokerze */}
       {portfolio && (
-        <PortfolioTable portfolio={portfolio} rate={fxRate} currency={displayCurrency} />
+        <PortfolioTable
+          portfolio={portfolio}
+          rate={fxRate}
+          currency={displayCurrency}
+          dividendsByTicker={dividends?.byTicker ?? null}
+          transactions={transactions}
+        />
       )}
 
       {/* Sekcja z czterema wykresami — po tabeli portfela */}

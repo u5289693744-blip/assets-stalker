@@ -74,16 +74,26 @@ function heldQtyAtDate(transactions, ticker, dateStr) {
  *   transactions: lista wszystkich transakcji
  *   fx: { usdToPln, eurToUsd }
  *
- * Zwraca tablicę punktów rocznych do wykresu słupkowego:
- * [
- *   {
- *     year: "2023",
- *     totalUSD: number,           // suma dywidend w USD w tym roku
- *     byTicker: { AAPL: usd, ...} // podział na tickery (w USD)
- *   },
- *   ...
- * ]
- * Posortowane rosnąco po roku.
+ * Zwraca obiekt:
+ * {
+ *   byYear: [                          // do wykresu słupkowego
+ *     {
+ *       year: "2023",
+ *       totalUSD: number,
+ *       byTicker: { AAPL: usd, ... }
+ *     },
+ *     ...
+ *   ],
+ *   byTicker: {                        // do modala historii dywidend
+ *     AAPL: [
+ *       { dateStr, heldQty, amountPerUnitUSD, totalUSD },
+ *       ...
+ *     ],
+ *     ...
+ *   }
+ * }
+ * byYear posortowane rosnąco po roku.
+ * Każda lista w byTicker posortowana rosnąco po dacie.
  */
 export async function fetchAllDividends(positions, transactions, fx) {
   const buySellTxs = transactions.filter((t) => t.action === 'buy' || t.action === 'sell')
@@ -110,30 +120,40 @@ export async function fetchAllDividends(positions, transactions, fx) {
   // Grupowanie po roku i tickerze (w USD)
   const yearMap = new Map() // "YYYY" → Map<ticker, totalUSD>
 
+  // Lista szczegółowych wypłat per ticker (do modala historii)
+  const tickerDivMap = new Map() // ticker → [{ dateStr, heldQty, amountPerUnitUSD, totalUSD }]
+
   for (const { ticker, isEur, divs } of fetched) {
     for (const { dateStr, amount } of divs) {
       // Ile akcji mieliśmy w dniu wypłaty dywidendy?
       const qty = heldQtyAtDate(buySellTxs, ticker, dateStr)
       if (qty <= 1e-9) continue // nie posiadaliśmy akcji w tym dniu
 
-      // Kwota dywidendy w USD
-      let amountUSD
+      // Kwota dywidendy na jednostkę i łącznie w USD
+      let amountPerUnitUSD
       if (isEur) {
-        amountUSD = fx?.eurToUsd ? amount * qty * fx.eurToUsd : null
+        amountPerUnitUSD = fx?.eurToUsd ? amount * fx.eurToUsd : null
       } else {
-        amountUSD = amount * qty
+        amountPerUnitUSD = amount
       }
-      if (amountUSD === null || amountUSD <= 0) continue
+      if (amountPerUnitUSD === null || amountPerUnitUSD <= 0) continue
 
+      const totalUSD = amountPerUnitUSD * qty
+
+      // Zapis do agregacji rocznej
       const year = dateStr.slice(0, 4)
       if (!yearMap.has(year)) yearMap.set(year, new Map())
       const byTicker = yearMap.get(year)
-      byTicker.set(ticker, (byTicker.get(ticker) ?? 0) + amountUSD)
+      byTicker.set(ticker, (byTicker.get(ticker) ?? 0) + totalUSD)
+
+      // Zapis szczegółowej wypłaty dla modala
+      if (!tickerDivMap.has(ticker)) tickerDivMap.set(ticker, [])
+      tickerDivMap.get(ticker).push({ dateStr, heldQty: qty, amountPerUnitUSD, totalUSD })
     }
   }
 
-  // Konwertuj do tablicy posortowanej po roku
-  const result = []
+  // Konwertuj byYear do tablicy posortowanej po roku
+  const byYear = []
   for (const [year, byTicker] of yearMap) {
     let totalUSD = 0
     const byTickerObj = {}
@@ -141,9 +161,16 @@ export async function fetchAllDividends(positions, transactions, fx) {
       totalUSD += usd
       byTickerObj[ticker] = usd
     }
-    result.push({ year, totalUSD, byTicker: byTickerObj })
+    byYear.push({ year, totalUSD, byTicker: byTickerObj })
   }
-  result.sort((a, b) => a.year.localeCompare(b.year))
+  byYear.sort((a, b) => a.year.localeCompare(b.year))
 
-  return result
+  // Konwertuj byTicker do obiektu (klucz = ticker, wartość = lista wypłat posortowana po dacie)
+  const byTicker = {}
+  for (const [ticker, payments] of tickerDivMap) {
+    payments.sort((a, b) => a.dateStr.localeCompare(b.dateStr))
+    byTicker[ticker] = payments
+  }
+
+  return { byYear, byTicker }
 }

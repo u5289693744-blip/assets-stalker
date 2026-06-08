@@ -46,7 +46,10 @@ export default function DividendsBar({ dividends, rate, currency, loading }) {
     return <p className="chart-loading">Pobieranie danych o dywidendach...</p>
   }
 
-  if (!dividends || dividends.length === 0) {
+  // Obsługa nowej struktury { byYear, byTicker } oraz starej tablicy (fallback)
+  const yearData = dividends?.byYear ?? dividends
+
+  if (!yearData || yearData.length === 0) {
     return (
       <p className="chart-empty">
         Brak zarejestrowanych dywidend dla posiadanych aktywów w tym portfelu.
@@ -54,7 +57,7 @@ export default function DividendsBar({ dividends, rate, currency, loading }) {
     )
   }
 
-  const chartData = dividends.map((d) => ({
+  const chartData = yearData.map((d) => ({
     year: d.year,
     totalUSD: d.totalUSD,
     totalDisplay: rate ? d.totalUSD * rate : d.totalUSD,
