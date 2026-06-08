@@ -1,12 +1,26 @@
 # Folder: prices
 
-Tutaj bedzie pobieranie aktualnych cen i kursow walut — wylacznie ze zrodel
-**darmowych**, bez kluczy platnych ani subskrypcji.
+Pobieranie aktualnych cen aktywów i kursów walut — wyłącznie ze źródeł
+**darmowych**, bez kluczy płatnych ani subskrypcji.
 
-Planowane (darmowe) zrodla do podlaczenia w kolejnych krokach:
-- **CoinGecko** — ceny kryptowalut (BTC, ETH, SOL...),
-- **Stooq** — ceny akcji, ETF-ow i polskich obligacji,
-- **Frankfurter / Europejski Bank Centralny** — kursy walut do przeliczen
-  (USD jest waluta bazowa obliczen, PLN/EUR sluza do wyswietlania).
+Źródła używane w aplikacji:
+- **Yahoo Finance** (`fetchPrices.js`, `../history/fetchHistoricalPrices.js`,
+  `../dividends/fetchDividends.js`) — ceny akcji, ETF-ów i kryptowalut: bieżące,
+  cena otwarcia dnia, historia miesięczna oraz dywidendy. Jedno spójne źródło dla
+  wszystkich rodzajów aktywów, wołane przez proxy `/api/yahoo` (Yahoo nie wysyła
+  nagłówków CORS).
+- **Frankfurter / Europejski Bank Centralny** — kursy walut do przeliczeń
+  (USD jest walutą bazową obliczeń, PLN/EUR służą do wyświetlania).
 
-Dywidendy beda wyliczane na podstawie posiadanych aktywow (a nie wpisywane do CSV).
+Symbole Yahoo: akcje USA — ticker bez zmian; europejskie ETF-y — `<TICKER>.DE`
+(w EUR, przeliczane na USD); krypto — `<TICKER>-USD`.
+
+Dlaczego nie Stooq / CoinGecko:
+- **Stooq** przestał udostępniać darmowe dane historyczne (endpoint dzienny wymaga
+  teraz klucza API).
+- **CoinGecko** (darmowe) ogranicza historię do 365 dni — za mało dla wieloletniego
+  portfela, a dzielenie krypto na dwa źródła nie miałoby sensu.
+
+Obligacje, gotówka i metale szlachetne nie mają publicznego cennika → cena `null`.
+Dywidendy są pobierane z Yahoo (wypłata na akcję × liczba posiadanych jednostek
+w dniu wypłaty).

@@ -7,6 +7,24 @@ Zawiera kluczowe decyzje podjęte podczas budowania aplikacji.
 
 ## API i źródła danych
 
+- **2026-06-03 — STAN AKTUALNY (zastępuje wcześniejsze wpisy o Stooq/CoinGecko poniżej).**
+  Skonsolidowano wszystkie ceny aktywów na **Yahoo Finance**; Stooq i CoinGecko usunięte.
+  - **Yahoo Finance** — jedyne źródło cen akcji, ETF-ów i krypto: bieżące, otwarcie dnia,
+    historia miesięczna i dywidendy. Przez proxy Vite `/api/yahoo` → `https://query1.finance.yahoo.com`
+    (Yahoo nie wysyła CORS; proxy działa tylko pod `npm run dev`). Endpoint `/v8/finance/chart/<symbol>`:
+    bieżące = `interval=1d&range=5d` (regularMarketPrice + Open ostatniej świecy),
+    historia = `interval=1mo`. Symbole: akcje USA → ticker; ETF-y EU → `<TICKER>.DE` (EUR→USD
+    bieżącym kursem); krypto → `<TICKER>-USD`. Pliki: `fetchPrices.js`,
+    `history/fetchHistoricalPrices.js`, `dividends/fetchDividends.js`.
+  - **Frankfurter / EBC** — bez zmian, kursy walut (CORS ok, wołane bezpośrednio).
+  - **Dlaczego porzucono Stooq i CoinGecko:** Stooq zablokował darmową historię (wymaga klucza
+    API). CoinGecko (darmowe) ogranicza historię do 365 dni — za mało dla wieloletniego portfela,
+    a dzielenie krypto na dwa źródła (CoinGecko ≤365 dni + Yahoo starsze) nie miało sensu.
+    Yahoo obsługuje wszystkie aktywa jednym API — jedno spójne źródło. Ryzyko: Yahoo jest
+    nieoficjalne (wewnętrzny endpoint strony), brak danych obsłużony łagodnie (null → „—").
+  - **UWAGA:** zmiana proxy w `vite.config.js` wymaga RESTARTU `npm run dev` (samo odświeżenie
+    przeglądarki nie przeładowuje konfiguracji proxy).
+
 - **2026-06-01** — Wybrane (planowane, jeszcze niepodłączone) darmowe źródła danych,
   bez kluczy płatnych i subskrypcji:
   - **CoinGecko** — ceny kryptowalut (BTC, ETH, SOL...).
@@ -66,7 +84,99 @@ Zawiera kluczowe decyzje podjęte podczas budowania aplikacji.
 
 ## Naprawione błędy
 
-_(brak wpisów)_
+- **2026-06-03** — Linia „Zainwestowane" na wykresie liniowym (ValueVsInvested) nie zgadzała
+  się z kartą „Zainwestowane" w panelu. Wykres `buildPortfolioHistory` doliczał koszt
+  obligacji (EDO, COI ~9 000 zł), których panel nie liczy (brak ceny), oraz liczył koszt
+  Bitcoina przez uśrednienie zbiorcze (BTC u dwóch brokerów), inaczej niż panel (per broker).
+  Różnica ≈ 2455 USD. **Naprawa:** dodano `PRICEABLE_TYPES = {stock, etf, crypto}` — linia
+  zainwestowanego pomija obligacje/gotówkę we wszystkich miesiącach; w bieżącym miesiącu
+  zainwestowane jest pinowane do `cur.costBasisUSD` (zagregowany koszt z pozycji panelu),
+  więc ostatni punkt = `totalInvestedUSD` z panelu co do grosza. Zweryfikowane skryptem
+  (różnice wartości/zainwestowanego ~0).
+
+- **2026-06-03** — Wykres „Skład portfela w czasie" pokazywał płaskie zero dla całej historii
+  (2023–2025), realne dane tylko w bieżącym miesiącu. Przyczyna: **Stooq zablokował darmowe
+  ceny historyczne** — endpoint `/q/d/l/?s=...&i=d` wymaga teraz klucza API i zamiast CSV
+  zwraca instrukcję „Get your apikey". `fetchHistoricalPrices` parsował to jako brak danych →
+  puste mapy → wszystkie miesiące 0%. (Bieżące ceny Stooq `/q/l/` nadal działają bez klucza.)
+  **Naprawa:** przepisano `fetchHistoricalPrices.js` na **Yahoo Finance** `/v8/finance/chart`
+  (przez istniejące proxy `/api/yahoo`), interwał `1mo`. Symbole: akcje USA bez zmian,
+  ETF-y EU → `<TICKER>.DE` (EUR→USD bieżącym kursem), krypto → `<TICKER>-USD`. Kształt danych
+  bez zmian (Map<ticker, Map<data, USD>>), więc buildPortfolioHistory działa bez modyfikacji.
+  Zweryfikowane: 42/42 miesiące mają realne wartości, podział zmienia się historycznie.
+
+- **2026-06-03** — Wykresy działały w Chrome, ale NIE w Firefoksie (pusta historia w obu
+  trybach, też incognito). Przyczyna: pośrednik Vite przekazywał do Yahoo nagłówek
+  `User-Agent` przeglądarki, a Yahoo **odrzuca (HTTP 429)** zapytania z podpisem Firefoksa,
+  natomiast z podpisem Chrome zwraca 200. Test A/B przez proxy: Firefox-UA → 429,
+  Chrome-UA → 200. **Naprawa:** w `vite.config.js` proxy `/api/yahoo` ma teraz hook
+  `configure` → `proxyReq.setHeader('User-Agent', <staly Chrome UA>)`, więc Yahoo zawsze
+  dostaje akceptowany podpis niezależnie od przeglądarki użytkownika. Zmiana proxy wymaga
+  RESTARTU `npm run dev`.
+
+---
+
+## Wykresy — implementacja (2026-06-03)
+
+### Nowe źródła danych
+
+- **Stooq historyczny** — endpoint `/api/stooq/q/d/l/?s=<symbol>&i=d` → CSV z kolumnami
+  Date,Open,High,Low,Close,Volume (dzienny interwał). Parsujemy Close (indeks 4 w tym
+  endpoincie — uwaga: inny format niż endpoint bieżący `q/l/`). Symbole i przeliczenie
+  EUR→USD identyczne jak dla bieżących cen.
+- **CoinGecko market_chart** — `coins/<id>/market_chart?vs_currency=usd&days=max` →
+  `prices: [[ms, usd], ...]`. Ceny bezpośrednio w USD. Używamy do historii krypto.
+- **Yahoo Finance dywidendy** — przez nowe proxy `/api/yahoo` → `https://query1.finance.yahoo.com`.
+  Endpoint: `/v8/finance/chart/<symbol>?period1=0&period2=9999999999&interval=1d&events=div`.
+  Odpowiedź: `chart.result[0].events.dividends = { <ts>: { amount, date } }`.
+  Symbole: akcje US → `<TICKER>` (np. AAPL), ETF-y europejskie → `<TICKER>.DE` (np. VWCE.DE).
+  Dywidenda na akcję w walucie waloru; przeliczamy na USD bieżącym FX.
+
+### Formuły rekonstrukcji historycznej
+
+- **Oś czasu**: miesiące od miesiąca pierwszej transakcji buy/sell do bieżącego miesiąca.
+- **heldQty(ticker, M)**: Σ buy.qty − Σ sell.qty dla transakcji z datą ≤ koniec miesiąca M.
+- **avgCostUSD(ticker, M)**: Σ(cena_buy_USD × qty) / Σ qty dla transakcji buy ≤ M.
+  Przeliczenie na USD: bieżący kurs FX (identycznie jak buildPortfolio).
+- **investedUSD(ticker, M)**: avgCostUSD × heldQty(M) — ile gotówki tkwi w tej pozycji.
+- **valueUSD(ticker, M)**: heldQty(M) × cena_historyczna_USD z dziennej mapy (forward-fill:
+  ostatni dostępny dzień ≤ koniec miesiąca). Dla bieżącego miesiąca → patrz pinowanie niżej.
+- **Formuła dywidend**: amount(na akcję) × heldQty(ticker, data_ex_dividend) → USD → opcjonalnie PLN.
+  heldQty na dzień ex-dividend = stan posiadania na podstawie transakcji buy/sell do tej daty.
+
+### Pinowanie punktu "dziś" — krytyczna zasada spójności
+
+- Ostatni punkt osi czasu (bieżący miesiąc) NIE używa historycznych cen z Stooq/CoinGecko.
+  Zamiast tego bierze `currentValueUSD` i `costBasisUSD` wprost z `buildPortfolio` (po pozycjach).
+- Dzięki temu:
+  - Suma wykresu kołowego (AllocationPie) = `totalPortfolioValueUSD` z panelu.
+  - Ostatni punkt linii "Aktualna wartość" (ValueVsInvested) = `totalPortfolioValueUSD`.
+  - Ostatni punkt linii "Zainwestowane" (ValueVsInvested) = `totalInvestedUSD`.
+- Implementacja w `buildPortfolioHistory`: dla `isCurrentMonth === true` używamy
+  `currentPositions` (Map zbudowana z `portfolio.brokers`), nie cen historycznych.
+
+### Nowe komponenty i moduły
+
+- `src/lib/history/fetchHistoricalPrices.js` — pobiera dzienne mapy cen dla wszystkich tickerów.
+- `src/lib/history/buildPortfolioHistory.js` — rekonstruuje portfel miesiąc po miesiącu.
+- `src/lib/history/fetchDividends.js` — pobiera i przetwarza dywidendy z Yahoo Finance.
+- `src/components/charts/AllocationPie.jsx` — wykres kołowy (bieżący skład).
+- `src/components/charts/AllocationAreaOverTime.jsx` — warstwowy obszarowy 100% z przyciskami zakresu.
+- `src/components/charts/ValueVsInvested.jsx` — dwie linie: wartość vs zainwestowane.
+- `src/components/charts/DividendsBar.jsx` — słupki dywidend rok po roku.
+- `src/components/ChartsSection.jsx` — układ pionowy wszystkich czterech wykresów.
+
+### Proxy Yahoo
+
+- Dodano do `vite.config.js`: `/api/yahoo` → `https://query1.finance.yahoo.com`
+  (changeOrigin: true, secure: false, rewrite usuwa prefix `/api/yahoo`).
+- Analogicznie jak Stooq — działa tylko pod `npm run dev`.
+
+### Biblioteka Recharts
+
+- Zainstalowana: `npm install recharts` (40 pakietów, ~602 kB po minifikacji —
+  ostrzeżenie o rozmiarze chunka jest oczekiwane, nie jest błędem).
+- Używana we wszystkich czterech komponentach wykresów.
 
 ## Tymczasowe wykluczenia i planowane rozszerzenia
 

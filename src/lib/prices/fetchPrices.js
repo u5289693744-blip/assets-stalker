@@ -1,30 +1,46 @@
 /**
- * Pobieranie aktualnych cen i kursów walut z darmowych źródeł publicznych.
+ * Pobieranie aktualnych cen aktywów i kursów walut z darmowych źródeł publicznych.
  *
  * Zasada walutowa projektu: wszystkie ceny zwracamy w USD.
  * Przeliczenie na PLN odbywa się wyłącznie przy wyświetlaniu (w komponentach).
  *
  * Źródła:
- *  - Krypto (type=crypto): CoinGecko — zwraca USD bezpośrednio, CORS ok.
- *  - Akcje i ETF-y (type=stock, type=etf): Stooq przez proxy Vite
- *      (/api/stooq → https://stooq.com). Symbole .us → cena w USD,
- *      symbole .de → cena w EUR (przeliczamy na USD).
- *  - FX: Frankfurter (dane EBC) — kurs USD→PLN i EUR→USD.
- *  - Obligacje (bond), gotówka (cash): brak publicznego cennika → null.
+ *  - Ceny aktywów (akcje, ETF-y, krypto): Yahoo Finance przez proxy Vite
+ *      (/api/yahoo → https://query1.finance.yahoo.com). Jedno źródło dla wszystkich
+ *      rodzajów aktywów — daje cenę bieżącą oraz cenę otwarcia dnia.
+ *  - Kursy walut (FX): Frankfurter (dane EBC) — kurs USD→PLN i EUR→USD.
+ *  - Obligacje (bond), gotówka (cash), metale (precious_metal): brak publicznego
+ *      cennika → null.
+ *
+ * Dlaczego Yahoo dla wszystkiego:
+ *  - Stooq zablokował darmowe dane historyczne (wymaga klucza API).
+ *  - CoinGecko (darmowe) ogranicza historię do 365 dni — za mało dla wieloletniego portfela.
+ *  - Yahoo jednym endpointem obsługuje akcje, ETF-y i krypto (bieżące i historyczne),
+ *    więc trzymamy jedno spójne źródło zamiast trzech.
+ *
+ * Symbole Yahoo:
+ *  - akcje USA: ticker bez zmian (AAPL, MSFT, ...)
+ *  - europejskie ETF-y: <TICKER>.DE (notowane w EUR — przeliczane na USD)
+ *  - krypto: <TICKER>-USD (BTC-USD, ETH-USD, SOL-USD)
  */
 
-// Mapa: ticker krypto → id w CoinGecko.
-const COINGECKO_IDS = {
-  BTC: 'bitcoin',
-  ETH: 'ethereum',
-  SOL: 'solana',
+// Europejskie ETF-y → symbol Yahoo (notowane na XETRA, w EUR).
+const YAHOO_ETF_SYMBOLS = {
+  VWCE: 'VWCE.DE',
+  EUNL: 'EUNL.DE',
+  SXR8: 'SXR8.DE',
 }
 
-// Mapa: ticker ETF → symbol Stooq (rynek europejski, ceny w EUR).
-const STOOQ_ETF_SYMBOLS = {
-  VWCE: 'vwce.de',
-  EUNL: 'eunl.de',
-  SXR8: 'sxr8.de',
+/**
+ * Buduje symbol Yahoo dla danego tickera i typu.
+ * Zwraca null gdy aktywo nie ma ceny rynkowej (obligacje, gotówka, metale).
+ */
+function yahooSymbol(ticker, type) {
+  const upper = ticker.toUpperCase()
+  if (type === 'crypto') return `${upper}-USD`
+  if (type === 'etf' && YAHOO_ETF_SYMBOLS[upper]) return YAHOO_ETF_SYMBOLS[upper]
+  if (type === 'stock' || type === 'etf') return upper // akcje USA / ETF-y w USD
+  return null
 }
 
 /**
@@ -47,69 +63,52 @@ export async function fetchFxRates() {
 }
 
 /**
- * Pobiera ceny kryptowalut z CoinGecko dla podanego zbioru tickerów.
- * Zwraca obiekt { prices: Map<ticker, priceUSD>, opens: Map<ticker, openPriceUSD> }.
+ * Pobiera z Yahoo Finance bieżącą cenę i cenę otwarcia dnia dla jednego symbolu.
+ * Zwraca { priceUSD, openUSD } (każde number|null) lub null gdy zapytanie zawiedzie.
  *
- * Cena otwarcia (przybliżona) liczona ze zmiany dobowej:
- *   openPriceUSD = currentPrice / (1 + usd_24h_change / 100)
- * CoinGecko nie zwraca dosłownie ceny otwarcia sesji — to przybliżenie z 24h temu.
+ * Używamy interwału dziennego z zakresem kilku dni — ostatnia świeca to dzisiejsza
+ * (lub ostatnia sesja): jej Open = cena otwarcia, a bieżącą cenę bierzemy z
+ * meta.regularMarketPrice (najbardziej aktualna). Ceny w EUR przeliczamy bieżącym
+ * kursem eurToUsd.
  */
-async function fetchCryptoPrices(tickers) {
-  const prices = new Map()
-  const opens = new Map()
-  const ids = tickers
-    .map((t) => ({ ticker: t, id: COINGECKO_IDS[t.toUpperCase()] }))
-    .filter((x) => x.id)
-
-  if (ids.length === 0) return { prices, opens }
-
+async function fetchYahooQuote(symbol, eurToUsd) {
   try {
-    const idList = ids.map((x) => x.id).join(',')
-    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${idList}&vs_currencies=usd&include_24hr_change=true`
-    const res = await fetch(url)
-    if (!res.ok) return { prices, opens }
-    const data = await res.json()
-    for (const { ticker, id } of ids) {
-      const price = data?.[id]?.usd
-      const change24h = data?.[id]?.usd_24h_change
-      if (typeof price === 'number') {
-        prices.set(ticker.toUpperCase(), price)
-        // Przybliżona cena 24h temu (jako "open")
-        if (typeof change24h === 'number' && change24h !== -100) {
-          opens.set(ticker.toUpperCase(), price / (1 + change24h / 100))
-        }
-      }
-    }
-  } catch {
-    // Sieć zawodzi — zwracamy puste mapy (brak ceny, nie crash).
-  }
-  return { prices, opens }
-}
-
-/**
- * Pobiera cenę otwarcia i zamknięcia jednego aktywa ze Stooq przez proxy Vite.
- * Zwraca { close, open } lub null gdy się nie uda.
- * symbol: np. "aapl.us" (USD) lub "vwce.de" (EUR)
- *
- * Format CSV ze Stooq: Symbol,Date,Time,Open,High,Low,Close,Volume
- *   indeks 3 = Open, indeks 6 = Close
- */
-async function fetchStooqPrice(symbol) {
-  try {
-    const url = `/api/stooq/q/l/?s=${encodeURIComponent(symbol)}&f=sd2t2ohlcv&h&e=csv`
+    const url = `/api/yahoo/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`
     const res = await fetch(url)
     if (!res.ok) return null
-    const text = await res.text()
-    const lines = text.trim().split('\n')
-    if (lines.length < 2) return null
-    const values = lines[1].split(',')
-    const open = parseFloat(values[3])
-    const close = parseFloat(values[6])
-    if (isNaN(close) || close <= 0) return null
-    return {
-      close,
-      open: isNaN(open) || open <= 0 ? null : open,
+    const data = await res.json()
+    const result = data?.chart?.result?.[0]
+    if (!result) return null
+
+    const currency = result.meta?.currency
+    const quote = result.indicators?.quote?.[0]
+    const closes = quote?.close
+    const opens = quote?.open
+    if (!Array.isArray(closes)) return null
+
+    // Ostatni dzień z poprawną ceną zamknięcia.
+    let lastIdx = closes.length - 1
+    while (lastIdx >= 0 && typeof closes[lastIdx] !== 'number') lastIdx--
+    if (lastIdx < 0) return null
+
+    const currentNative =
+      typeof result.meta?.regularMarketPrice === 'number'
+        ? result.meta.regularMarketPrice
+        : closes[lastIdx]
+    const openNative = typeof opens?.[lastIdx] === 'number' ? opens[lastIdx] : null
+
+    // Przelicznik na USD według waluty notowania.
+    let toUsd = 1
+    if (currency === 'EUR') {
+      if (!eurToUsd) return null
+      toUsd = eurToUsd
+    } else if (currency && currency !== 'USD') {
+      return null // nieobsługiwana waluta — nie zgadujemy
     }
+
+    const priceUSD = currentNative > 0 ? currentNative * toUsd : null
+    const openUSD = openNative !== null && openNative > 0 ? openNative * toUsd : null
+    return { priceUSD, openUSD }
   } catch {
     return null
   }
@@ -121,93 +120,50 @@ async function fetchStooqPrice(symbol) {
  * Przyjmuje listę pozycji (każda: { ticker, type }) i zestaw callbacków:
  *   onProgress(done, total, succeeded, failed) — wywoływane po każdym fetchu
  *   onDone(pricesUSD, openPricesUSD) — po zakończeniu wszystkich
- *     pricesUSD: Map<ticker, number|null> — ceny zamknięcia w USD
+ *     pricesUSD: Map<ticker, number|null> — bieżące ceny w USD
  *     openPricesUSD: Map<ticker, number|null> — ceny otwarcia dnia w USD
- *       (Stooq: Open z CSV; krypto: przybliżenie z 24h change CoinGecko)
  *
  * Dla każdego tickera cena to liczba w USD lub null (brak ceny).
- * Obligacje i gotówka → zawsze null (brak publicznego cennika).
+ * Obligacje, gotówka i metale → zawsze null (brak publicznego cennika).
  */
 export async function fetchAllPrices(positions, onProgress, onDone) {
-  // Zbieramy unikalne tickery według typu (jeden ticker może być u wielu brokerów).
-  const cryptoTickers = []
-  const stockEtfTickers = []
+  const pricesUSD = new Map()
+  const openPricesUSD = new Map()
 
+  // Unikalne tickery; rozdziel na te z ceną (Yahoo) i bez ceny.
+  const priceable = []
   const seen = new Set()
   for (const { ticker, type } of positions) {
     if (seen.has(ticker)) continue
     seen.add(ticker)
-    if (type === 'crypto') cryptoTickers.push(ticker)
-    else if (type === 'stock' || type === 'etf') stockEtfTickers.push(ticker)
-    // bond, cash, precious_metal → brak ceny
-  }
-
-  const total = cryptoTickers.length + stockEtfTickers.length
-  let done = 0
-  let succeeded = 0
-  let failed = 0
-
-  // Wynik zbiorczy: ticker → priceUSD | null
-  const pricesUSD = new Map()
-  // Ceny otwarcia dnia: ticker → openPriceUSD | null
-  const openPricesUSD = new Map()
-
-  // Wypełnij null dla wszystkich tickerów bez cennika (obligacje, gotówka itp.).
-  for (const { ticker, type } of positions) {
-    if (type !== 'crypto' && type !== 'stock' && type !== 'etf') {
+    const symbol = yahooSymbol(ticker, type)
+    if (symbol) {
+      priceable.push({ ticker, symbol })
+    } else {
+      // obligacje, gotówka, metale — brak publicznej ceny
       pricesUSD.set(ticker, null)
       openPricesUSD.set(ticker, null)
     }
   }
 
+  const total = priceable.length
+  let done = 0
+  let succeeded = 0
+  let failed = 0
+
   if (total === 0) {
     onDone(pricesUSD, openPricesUSD)
-    return
+    return null
   }
 
-  // Pobierz FX — potrzebny do przeliczenia ETF-ów z EUR na USD.
+  // Kurs FX — potrzebny do przeliczenia ETF-ów z EUR na USD.
   const fx = await fetchFxRates()
 
-  // Pobierz krypto — wszystkie naraz (jeden request CoinGecko).
-  const cryptoResult = await fetchCryptoPrices(cryptoTickers)
-  for (const ticker of cryptoTickers) {
-    const price = cryptoResult.prices.get(ticker.toUpperCase()) ?? null
-    const open = cryptoResult.opens.get(ticker.toUpperCase()) ?? null
-    pricesUSD.set(ticker, price)
-    openPricesUSD.set(ticker, open)
-    done++
-    if (price !== null) succeeded++
-    else failed++
-    onProgress(done, total, succeeded, failed)
-  }
-
-  // Pobierz akcje i ETF-y równolegle, aktualizując postęp po każdym.
-  const stockFetches = stockEtfTickers.map(async (ticker) => {
-    const upper = ticker.toUpperCase()
-    const etfSymbol = STOOQ_ETF_SYMBOLS[upper]
-    let result = null
-    let isEur = false
-
-    if (etfSymbol) {
-      result = await fetchStooqPrice(etfSymbol)
-      isEur = true
-    } else {
-      result = await fetchStooqPrice(`${ticker.toLowerCase()}.us`)
-    }
-
-    let priceUSD = null
-    let openUSD = null
-
-    if (result !== null) {
-      if (isEur && fx?.eurToUsd) {
-        priceUSD = result.close * fx.eurToUsd
-        openUSD = result.open !== null ? result.open * fx.eurToUsd : null
-      } else if (!isEur) {
-        priceUSD = result.close
-        openUSD = result.open
-      }
-      // Jeśli isEur ale brak eurToUsd → priceUSD zostaje null
-    }
+  // Pobierz ceny wszystkich aktywów równolegle, aktualizując postęp po każdym.
+  const fetches = priceable.map(async ({ ticker, symbol }) => {
+    const quote = await fetchYahooQuote(symbol, fx?.eurToUsd ?? null)
+    const priceUSD = quote?.priceUSD ?? null
+    const openUSD = quote?.openUSD ?? null
 
     pricesUSD.set(ticker, priceUSD)
     openPricesUSD.set(ticker, openUSD)
@@ -217,7 +173,7 @@ export async function fetchAllPrices(positions, onProgress, onDone) {
     onProgress(done, total, succeeded, failed)
   })
 
-  await Promise.all(stockFetches)
+  await Promise.all(fetches)
   onDone(pricesUSD, openPricesUSD)
 
   return fx

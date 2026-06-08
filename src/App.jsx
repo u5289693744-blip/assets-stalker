@@ -2,11 +2,15 @@ import { useEffect, useState, useRef } from 'react'
 import { parseTransactions } from './lib/parsing/parseTransactions.js'
 import { buildPortfolio } from './lib/portfolio/buildPortfolio.js'
 import { fetchAllPrices, fetchFxRates } from './lib/prices/fetchPrices.js'
+import { fetchAllHistoricalPrices } from './lib/history/fetchHistoricalPrices.js'
+import { buildPortfolioHistory } from './lib/history/buildPortfolioHistory.js'
+import { fetchAllDividends } from './lib/history/fetchDividends.js'
 import FileLoader from './components/FileLoader.jsx'
 import TransactionsTable from './components/TransactionsTable.jsx'
 import PortfolioTable from './components/PortfolioTable.jsx'
 import PriceProgress from './components/PriceProgress.jsx'
 import SummaryPanel from './components/SummaryPanel.jsx'
+import ChartsSection from './components/ChartsSection.jsx'
 
 // Ścieżka do przykładowego pliku dołączonego do aplikacji (folder public).
 const SAMPLE_URL = `${import.meta.env.BASE_URL}sample-transactions.csv`
@@ -23,7 +27,7 @@ export default function App() {
   const [pricesUSD, setPricesUSD] = useState(null)
 
   // Ceny otwarcia dnia w USD — Map<ticker, number|null>
-  // Stooq: kolumna Open; krypto: przybliżenie z 24h change CoinGecko.
+  // Yahoo Finance: Open z dziennej świecy (dla wszystkich aktywów z ceną).
   const [openPricesUSD, setOpenPricesUSD] = useState(null)
 
   // Postęp pobierania cen
@@ -31,8 +35,19 @@ export default function App() {
   const [failedTickers, setFailedTickers] = useState([])
   const [pricesDone, setPricesDone] = useState(false)
 
+  // Dane historyczne — ceny miesięczne i historia portfela
+  const [portfolioHistory, setPortfolioHistory] = useState(null)
+  const [historyLoading, setHistoryLoading] = useState(false)
+
+  // Dywidendy rok po roku
+  const [dividends, setDividends] = useState(null)
+  const [dividendsLoading, setDividendsLoading] = useState(false)
+
   // Referencja do aktualnej mapy cen (do aktualizacji w trakcie fetchów)
   const pricesRef = useRef(new Map())
+
+  // Referencja do FX potrzebna przy pobieraniu historii (fx state może być opóźniony)
+  const fxRef = useRef(null)
 
   // Wczytanie tekstu CSV i zamiana na listę transakcji.
   function loadCsvText(csvText, sourceLabel) {
@@ -40,13 +55,17 @@ export default function App() {
     setTransactions(transactions)
     setErrors(errors)
     setSource(sourceLabel)
-    // Reset stanu cen przy wczytaniu nowego pliku
+    // Reset stanu cen i historii przy wczytaniu nowego pliku
     setPricesUSD(null)
     setOpenPricesUSD(null)
     setProgress({ done: 0, total: 0, succeeded: 0, failed: 0 })
     setFailedTickers([])
     setPricesDone(false)
     pricesRef.current = new Map()
+    setPortfolioHistory(null)
+    setHistoryLoading(false)
+    setDividends(null)
+    setDividendsLoading(false)
   }
 
   async function loadSample() {
@@ -89,6 +108,7 @@ export default function App() {
     // Pobierz FX najpierw (potrzebny do buildPortfolio)
     fetchFxRates().then((rates) => {
       localFx = rates
+      fxRef.current = rates
       setFx(rates)
     })
 
@@ -118,6 +138,68 @@ export default function App() {
       },
     )
   }, [transactions])
+
+  // Gdy ceny bieżące są gotowe — pobierz dane historyczne i dywidendy.
+  // Używamy pricesDone jako triggera, bo potrzebujemy portfolio z bieżącymi cenami
+  // do pinowania punktu "dziś" w historii.
+  useEffect(() => {
+    if (!pricesDone || transactions.length === 0) return
+
+    const seenTickers = new Set()
+    const positions = []
+    for (const t of transactions) {
+      if (!seenTickers.has(t.ticker)) {
+        seenTickers.add(t.ticker)
+        positions.push({ ticker: t.ticker, type: t.type })
+      }
+    }
+
+    const currentFx = fxRef.current
+    const today = new Date().toISOString().slice(0, 10)
+
+    // Zbuduj portfolio z bieżącymi cenami do pinowania ostatniego punktu
+    const currentPrices = pricesRef.current
+    const currentPortfolio = buildPortfolio(
+      transactions,
+      currentFx,
+      currentPrices,
+      new Map(), // openPrices nie potrzebne do historii
+      today,
+    )
+
+    // Pobierz historyczne ceny i dywidendy równolegle
+    setHistoryLoading(true)
+    setDividendsLoading(true)
+
+    fetchAllHistoricalPrices(positions, currentFx)
+      .then((historicalPrices) => {
+        const history = buildPortfolioHistory(
+          transactions,
+          currentFx,
+          historicalPrices,
+          currentPortfolio,
+          today,
+        )
+        setPortfolioHistory(history)
+      })
+      .catch(() => {
+        setPortfolioHistory([])
+      })
+      .finally(() => {
+        setHistoryLoading(false)
+      })
+
+    fetchAllDividends(positions, transactions, currentFx)
+      .then((divData) => {
+        setDividends(divData)
+      })
+      .catch(() => {
+        setDividends([])
+      })
+      .finally(() => {
+        setDividendsLoading(false)
+      })
+  }, [pricesDone, transactions])
 
   // Portfel przeliczony z transakcji, FX i cen — odświeżany reaktywnie.
   const portfolio =
@@ -202,6 +284,18 @@ export default function App() {
       {/* Główny widok: portfel pogrupowany po brokerze */}
       {portfolio && (
         <PortfolioTable portfolio={portfolio} usdToPln={fx?.usdToPln ?? null} />
+      )}
+
+      {/* Sekcja z czterema wykresami — po tabeli portfela */}
+      {portfolio && (
+        <ChartsSection
+          portfolio={portfolio}
+          usdToPln={fx?.usdToPln ?? null}
+          history={portfolioHistory}
+          historyLoading={historyLoading}
+          dividends={dividends}
+          dividendsLoading={dividendsLoading}
+        />
       )}
 
       {/* Tabela surowych transakcji — poniżej portfela */}

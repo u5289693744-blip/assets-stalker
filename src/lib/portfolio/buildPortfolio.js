@@ -180,7 +180,7 @@ export function buildPortfolio(transactions, fx, pricesUSD, openPricesUSD, today
           : null
 
       // Zmiana dzienna: (cena dziś − cena otwarcia) × ilość posiadanych jednostek
-      // Cena otwarcia pochodzi ze Stooq (kolumna Open) lub z przybliżenia CoinGecko (24h change).
+      // Cena otwarcia pochodzi z Yahoo Finance (Open dziennej świecy).
       const openPriceUSD = openPricesUSD?.get(ticker) ?? null
       const dayChangeUSD =
         currentPriceUSD !== null && openPriceUSD !== null
