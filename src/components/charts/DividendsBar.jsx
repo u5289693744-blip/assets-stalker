@@ -1,19 +1,23 @@
 /**
  * Wykres słupkowy — dywidendy rok po roku.
  *
- * Każdy słupek = suma dywidend otrzymanych w danym roku (w PLN).
+ * Każdy słupek = suma dywidend otrzymanych w danym roku (w wybranej walucie).
  * Dymek po najechaniu = lista "ticker: kwota" dla tego roku.
  * Jeśli brak dywidend → łagodna informacja zamiast pustego wykresu.
  */
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
-function fmtPln(usd, usdToPln) {
-  if (!usdToPln) return `${usd.toFixed(0)} USD`
-  const pln = usd * usdToPln
-  return new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN', maximumFractionDigits: 0 }).format(pln)
+function fmtDisplay(usd, rate, currency) {
+  if (!rate) return `${usd.toFixed(0)} USD`
+  const val = usd * rate
+  return new Intl.NumberFormat('pl-PL', {
+    style: 'currency',
+    currency: currency,
+    maximumFractionDigits: 0,
+  }).format(val)
 }
 
-function CustomTooltip({ active, payload, usdToPln }) {
+function CustomTooltip({ active, payload, rate, currency }) {
   if (!active || !payload?.length) return null
   const point = payload[0].payload
   return (
@@ -21,21 +25,23 @@ function CustomTooltip({ active, payload, usdToPln }) {
       <div className="chart-tooltip-title">{point.year}</div>
       <div className="chart-tooltip-row" style={{ marginBottom: '0.35rem' }}>
         <span>Razem:</span>
-        <span style={{ color: 'var(--gain)', fontWeight: 700 }}>{fmtPln(point.totalUSD, usdToPln)}</span>
+        <span style={{ color: 'var(--gain)', fontWeight: 700 }}>
+          {fmtDisplay(point.totalUSD, rate, currency)}
+        </span>
       </div>
       {Object.entries(point.byTicker)
         .sort((a, b) => b[1] - a[1])
         .map(([ticker, usd]) => (
           <div key={ticker} className="chart-tooltip-row">
             <span style={{ color: 'var(--accent)' }}>{ticker}</span>
-            <span>{fmtPln(usd, usdToPln)}</span>
+            <span>{fmtDisplay(usd, rate, currency)}</span>
           </div>
         ))}
     </div>
   )
 }
 
-export default function DividendsBar({ dividends, usdToPln, loading }) {
+export default function DividendsBar({ dividends, rate, currency, loading }) {
   if (loading) {
     return <p className="chart-loading">Pobieranie danych o dywidendach...</p>
   }
@@ -51,7 +57,7 @@ export default function DividendsBar({ dividends, usdToPln, loading }) {
   const chartData = dividends.map((d) => ({
     year: d.year,
     totalUSD: d.totalUSD,
-    totalDisplay: usdToPln ? d.totalUSD * usdToPln : d.totalUSD,
+    totalDisplay: rate ? d.totalUSD * rate : d.totalUSD,
     byTicker: d.byTicker,
   }))
 
@@ -71,7 +77,7 @@ export default function DividendsBar({ dividends, usdToPln, loading }) {
           tick={{ fill: 'var(--muted)', fontSize: 11 }}
           width={52}
         />
-        <Tooltip content={<CustomTooltip usdToPln={usdToPln} />} />
+        <Tooltip content={<CustomTooltip rate={rate} currency={currency} />} />
         <Bar dataKey="totalDisplay" name="Dywidendy" radius={[4, 4, 0, 0]}>
           {chartData.map((entry) => (
             <Cell key={entry.year} fill="var(--gain)" />

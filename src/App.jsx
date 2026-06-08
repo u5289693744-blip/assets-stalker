@@ -15,10 +15,23 @@ import ChartsSection from './components/ChartsSection.jsx'
 // Ścieżka do przykładowego pliku dołączonego do aplikacji (folder public).
 const SAMPLE_URL = `${import.meta.env.BASE_URL}sample-transactions.csv`
 
+const CURRENCY_KEY = 'asset-stalker.currency'
+
 export default function App() {
   const [transactions, setTransactions] = useState([])
   const [errors, setErrors] = useState([])
   const [source, setSource] = useState('')
+
+  // Waluta wyświetlania — zapamiętywana w localStorage. Domyślnie PLN.
+  const [displayCurrency, setDisplayCurrency] = useState(
+    () => localStorage.getItem(CURRENCY_KEY) ?? 'PLN',
+  )
+
+  function handleCurrencyChange(e) {
+    const val = e.target.value
+    setDisplayCurrency(val)
+    localStorage.setItem(CURRENCY_KEY, val)
+  }
 
   // Kurs walutowy z Frankfurter (EBC) — { usdToPln, eurToUsd }
   const [fx, setFx] = useState(null)
@@ -212,6 +225,17 @@ export default function App() {
         )
       : null
 
+  // Kurs USD → waluta wyświetlania (obliczenia zawsze w USD, przeliczenie tylko przy wyświetlaniu).
+  // PLN: fx.usdToPln  |  USD: 1  |  EUR: 1/fx.eurToUsd (bo eurToUsd = ile USD kosztuje 1 EUR)
+  let fxRate = null
+  if (displayCurrency === 'USD') {
+    fxRate = 1
+  } else if (displayCurrency === 'PLN' && fx?.usdToPln) {
+    fxRate = fx.usdToPln
+  } else if (displayCurrency === 'EUR' && fx?.eurToUsd) {
+    fxRate = 1 / fx.eurToUsd
+  }
+
   // Zliczenie transakcji według waluty — bez mieszania walut, zgodnie z zasadą projektu.
   const byCurrency = transactions.reduce((acc, t) => {
     acc[t.currency] = (acc[t.currency] || 0) + 1
@@ -230,6 +254,18 @@ export default function App() {
           onFileText={(text) => loadCsvText(text, 'własny plik')}
           onLoadSample={loadSample}
         />
+        <div className="currency-selector">
+          <label htmlFor="display-currency">Waluta:</label>
+          <select
+            id="display-currency"
+            value={displayCurrency}
+            onChange={handleCurrencyChange}
+          >
+            <option value="PLN">PLN</option>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+          </select>
+        </div>
         {source && (
           <p className="source">
             Źródło danych: <strong>{source}</strong> — wczytano{' '}
@@ -266,7 +302,8 @@ export default function App() {
           totalPnlUSD={portfolio.totalPnlUSD}
           totalDayChangeUSD={portfolio.totalDayChangeUSD}
           cagrPct={portfolio.cagrPct}
-          usdToPln={fx?.usdToPln ?? null}
+          rate={fxRate}
+          currency={displayCurrency}
         />
       )}
 
@@ -283,14 +320,15 @@ export default function App() {
 
       {/* Główny widok: portfel pogrupowany po brokerze */}
       {portfolio && (
-        <PortfolioTable portfolio={portfolio} usdToPln={fx?.usdToPln ?? null} />
+        <PortfolioTable portfolio={portfolio} rate={fxRate} currency={displayCurrency} />
       )}
 
       {/* Sekcja z czterema wykresami — po tabeli portfela */}
       {portfolio && (
         <ChartsSection
           portfolio={portfolio}
-          usdToPln={fx?.usdToPln ?? null}
+          rate={fxRate}
+          currency={displayCurrency}
           history={portfolioHistory}
           historyLoading={historyLoading}
           dividends={dividends}

@@ -4,7 +4,7 @@ import { useState } from 'react'
  * Tabela portfela pogrupowana po brokerze.
  * Każda sekcja brokera jest domyślnie zwinięta i można ją rozwinąć kliknięciem.
  *
- * Wyświetlane wartości są w PLN (przeliczone z USD po bieżącym kursie).
+ * Wyświetlane wartości są w wybranej walucie (przeliczone z USD po bieżącym kursie).
  * Wyjątek: kolumna "Cena zakupu" pokazuje wartości w walucie oryginalnej transakcji.
  */
 
@@ -16,10 +16,10 @@ function fmt(value, decimals = 2) {
   })
 }
 
-function fmtPln(usdValue, usdToPln) {
+function fmtDisplay(usdValue, rate, currency) {
   if (usdValue === null || usdValue === undefined) return '—'
-  if (!usdToPln) return '—'
-  return fmt(usdValue * usdToPln) + ' PLN'
+  if (!rate) return '—'
+  return fmt(usdValue * rate) + ' ' + currency
 }
 
 function fmtPct(value) {
@@ -28,6 +28,8 @@ function fmtPct(value) {
   return sign + fmt(value) + '%'
 }
 
+// Kolumna "Cena zakupu" — celowo NIE przeliczana na walutę wyświetlania.
+// Pokazuje dosłownie cenę, jaką użytkownik zapłacił, w oryginalnej walucie transakcji.
 function fmtPricePaid(min, max, currency) {
   if (min === undefined || max === undefined) return '—'
   if (min === max) return fmt(min) + ' ' + currency
@@ -41,13 +43,13 @@ function fmtQty(qty) {
   return fmt(qty, qty % 1 === 0 ? 0 : 2)
 }
 
-function PnlCell({ pnlUSD, usdToPln }) {
-  if (pnlUSD === null || !usdToPln) return <td className="num">—</td>
+function PnlCell({ pnlUSD, rate, currency }) {
+  if (pnlUSD === null || !rate) return <td className="num">—</td>
   const cls = pnlUSD >= 0 ? 'gain' : 'loss'
   const sign = pnlUSD >= 0 ? '+' : ''
   return (
     <td className={`num ${cls}`}>
-      {sign}{fmt(pnlUSD * usdToPln)} PLN
+      {sign}{fmt(pnlUSD * rate)} {currency}
     </td>
   )
 }
@@ -58,15 +60,15 @@ function PnlPctCell({ pnlPct }) {
   return <td className={`num ${cls}`}>{fmtPct(pnlPct)}</td>
 }
 
-function BrokerSection({ brokerData, usdToPln }) {
+function BrokerSection({ brokerData, rate, currency }) {
   const [open, setOpen] = useState(false)
   const { broker, positions, totalValueUSD, totalPnlUSD } = brokerData
 
-  const brokerValuePln = usdToPln && totalValueUSD ? fmt(totalValueUSD * usdToPln) + ' PLN' : '—'
+  const brokerValue = rate && totalValueUSD ? fmt(totalValueUSD * rate) + ' ' + currency : '—'
   const brokerPnlCls = totalPnlUSD >= 0 ? 'gain' : 'loss'
-  const brokerPnlPln =
-    usdToPln && totalPnlUSD !== null
-      ? (totalPnlUSD >= 0 ? '+' : '') + fmt(totalPnlUSD * usdToPln) + ' PLN'
+  const brokerPnl =
+    rate && totalPnlUSD !== null
+      ? (totalPnlUSD >= 0 ? '+' : '') + fmt(totalPnlUSD * rate) + ' ' + currency
       : null
 
   return (
@@ -79,10 +81,10 @@ function BrokerSection({ brokerData, usdToPln }) {
         <span className="broker-chevron">{open ? '▾' : '▸'}</span>
         <span className="broker-name">{broker}</span>
         <span className="broker-summary">
-          {brokerValuePln}
-          {brokerPnlPln && (
+          {brokerValue}
+          {brokerPnl && (
             <span className={`broker-pnl ${brokerPnlCls}`}>
-              {' '}({brokerPnlPln})
+              {' '}({brokerPnl})
             </span>
           )}
         </span>
@@ -120,9 +122,9 @@ function BrokerSection({ brokerData, usdToPln }) {
                     )}
                   </td>
                   <td className="num">{p.holdingDays}</td>
-                  <td className="num">{fmtPln(p.costBasisUSD, usdToPln)}</td>
-                  <td className="num">{fmtPln(p.currentValueUSD, usdToPln)}</td>
-                  <PnlCell pnlUSD={p.pnlUSD} usdToPln={usdToPln} />
+                  <td className="num">{fmtDisplay(p.costBasisUSD, rate, currency)}</td>
+                  <td className="num">{fmtDisplay(p.currentValueUSD, rate, currency)}</td>
+                  <PnlCell pnlUSD={p.pnlUSD} rate={rate} currency={currency} />
                   <PnlPctCell pnlPct={p.pnlPct} />
                   <td className="num">
                     {p.portfolioSharePct !== null ? fmtPct(p.portfolioSharePct) : '—'}
@@ -137,13 +139,14 @@ function BrokerSection({ brokerData, usdToPln }) {
   )
 }
 
-export default function PortfolioTable({ portfolio, usdToPln }) {
+export default function PortfolioTable({ portfolio, rate, currency }) {
   if (!portfolio || portfolio.brokers.length === 0) return null
 
   const { brokers, totalPortfolioValueUSD } = portfolio
-  const totalPln = usdToPln && totalPortfolioValueUSD
-    ? fmt(totalPortfolioValueUSD * usdToPln) + ' PLN'
-    : '—'
+  const totalDisplay =
+    rate && totalPortfolioValueUSD
+      ? fmt(totalPortfolioValueUSD * rate) + ' ' + currency
+      : '—'
 
   return (
     <section className="portfolio">
@@ -151,7 +154,7 @@ export default function PortfolioTable({ portfolio, usdToPln }) {
         <h2>Portfel inwestycyjny</h2>
         {totalPortfolioValueUSD > 0 && (
           <span className="portfolio-total">
-            Łączna wartość: <strong>{totalPln}</strong>
+            Łączna wartość: <strong>{totalDisplay}</strong>
           </span>
         )}
       </div>
@@ -165,13 +168,13 @@ export default function PortfolioTable({ portfolio, usdToPln }) {
           sprzedanych. <strong>Zysk / strata</strong> to różnica między wartością dziś a
           kosztem zakupu; jest to <em>zysk niezrealizowany</em> — aktywo nadal trzymasz,
           więc zysk/strata zmienia się razem z rynkiem. Zrealizowany zysk (ze sprzedaży)
-          nie jest tu widoczny. Wszystkie kwoty przeliczone są z USD na PLN według
-          bieżącego kursu EBC — nie historycznego.
+          nie jest tu widoczny. Wszystkie kwoty przeliczone są z USD na wybraną walutę
+          według bieżącego kursu EBC — nie historycznego.
         </p>
       </div>
 
       {brokers.map((b) => (
-        <BrokerSection key={b.broker} brokerData={b} usdToPln={usdToPln} />
+        <BrokerSection key={b.broker} brokerData={b} rate={rate} currency={currency} />
       ))}
     </section>
   )

@@ -17,7 +17,8 @@ import DividendsBar from './charts/DividendsBar.jsx'
 
 export default function ChartsSection({
   portfolio,
-  usdToPln,
+  rate,
+  currency,
   history,
   historyLoading,
   dividends,
@@ -35,7 +36,7 @@ export default function ChartsSection({
           kryptowaluty i inne. Procenty są wyliczone na podstawie bieżących cen rynkowych.
           Obligacje i gotówka nie mają ceny rynkowej, więc nie są uwzględnione.
         </p>
-        <AllocationPie portfolio={portfolio} usdToPln={usdToPln} />
+        <AllocationPie portfolio={portfolio} rate={rate} currency={currency} />
       </div>
 
       {/* Wykres 2 — jak zmieniał się skład w czasie */}
@@ -58,7 +59,7 @@ export default function ChartsSection({
           jesteś na plusie. Ostatni punkt obu linii odpowiada dokładnie wartościom
           z panelu podsumowania powyżej.
         </p>
-        <ValueVsInvested history={history} usdToPln={usdToPln} loading={historyLoading} />
+        <ValueVsInvested history={history} rate={rate} currency={currency} loading={historyLoading} />
       </div>
 
       {/* Wykres 4 — dywidendy */}
@@ -71,7 +72,7 @@ export default function ChartsSection({
           wypłacają dywidend w tym sensie.
           Uwaga: wycena obligacji (odsetki kuponowe) zostanie dodana w przyszłości.
         </p>
-        <DividendsBar dividends={dividends} usdToPln={usdToPln} loading={dividendsLoading} />
+        <DividendsBar dividends={dividends} rate={rate} currency={currency} loading={dividendsLoading} />
       </div>
     </section>
   )

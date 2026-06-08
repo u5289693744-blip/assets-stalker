@@ -8,7 +8,7 @@
  * SPÓJNOŚĆ: ostatni punkt obu linii jest pinowany do wyników buildPortfolio,
  * więc zawsze równa się wartościom z panelu podsumowania.
  *
- * Wyświetlamy wartości w PLN (przeliczenie bieżącym kursem FX).
+ * Wyświetlamy wartości w wybranej walucie (przeliczenie bieżącym kursem FX).
  */
 import { useState } from 'react'
 import {
@@ -23,24 +23,27 @@ const RANGES = [
   { label: 'Cały', months: null },
 ]
 
-function fmtPln(usd, usdToPln) {
-  if (usdToPln == null) return `${(usd / 1000).toFixed(0)}k USD`
-  const pln = usd * usdToPln
-  if (pln >= 1_000_000) return `${(pln / 1_000_000).toFixed(2)} mln zł`
-  if (pln >= 1_000) return `${(pln / 1_000).toFixed(1)}k zł`
-  return `${pln.toFixed(0)} zł`
+function fmtDisplay(usd, rate, currency) {
+  if (rate == null) return `${(usd / 1000).toFixed(0)}k USD`
+  const val = usd * rate
+  if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(2)} mln ${currency}`
+  if (val >= 1_000) return `${(val / 1_000).toFixed(1)}k ${currency}`
+  return `${val.toFixed(0)} ${currency}`
 }
 
-function CustomTooltip({ active, payload, label, usdToPln }) {
+function CustomTooltip({ active, payload, label, rate, currency }) {
   if (!active || !payload?.length) return null
   return (
     <div className="chart-tooltip">
       <div className="chart-tooltip-title">{label}</div>
       {payload.map((entry) => {
-        // entry.value jest JUŻ w walucie wyświetlania (PLN gdy znamy kurs, inaczej USD) —
-        // wartości linii (valuePLN/investedPLN) są przeliczone w chartData. Nie mnożymy ponownie.
-        const formatted = usdToPln
-          ? new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN', maximumFractionDigits: 0 }).format(entry.value)
+        // entry.value jest JUŻ w walucie wyświetlania (przeliczone w chartData). Nie mnożymy ponownie.
+        const formatted = rate
+          ? new Intl.NumberFormat('pl-PL', {
+              style: 'currency',
+              currency: currency,
+              maximumFractionDigits: 0,
+            }).format(entry.value)
           : `${entry.value.toFixed(0)} USD`
         return (
           <div key={entry.dataKey} className="chart-tooltip-row">
@@ -53,7 +56,7 @@ function CustomTooltip({ active, payload, label, usdToPln }) {
   )
 }
 
-export default function ValueVsInvested({ history, usdToPln, loading }) {
+export default function ValueVsInvested({ history, rate, currency, loading }) {
   const [range, setRange] = useState(null) // null = cały okres
 
   if (loading) {
@@ -69,22 +72,19 @@ export default function ValueVsInvested({ history, usdToPln, loading }) {
 
   const chartData = filtered.map((point) => ({
     label: point.label,
-    valuePLN: usdToPln ? point.totalValueUSD * usdToPln : point.totalValueUSD,
-    investedPLN: usdToPln ? point.totalInvestedUSD * usdToPln : point.totalInvestedUSD,
-    // Zachowujemy oryginalne USD do tooltipa
-    valueUSD: point.totalValueUSD,
-    investedUSD: point.totalInvestedUSD,
+    valueDisp: rate ? point.totalValueUSD * rate : point.totalValueUSD,
+    investedDisp: rate ? point.totalInvestedUSD * rate : point.totalInvestedUSD,
   }))
 
   // Etykieta osi Y
-  const maxVal = Math.max(...chartData.map((d) => Math.max(d.valuePLN, d.investedPLN)))
+  const maxVal = Math.max(...chartData.map((d) => Math.max(d.valueDisp, d.investedDisp)))
   const yTickFormatter = (v) => {
     if (maxVal >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`
     if (maxVal >= 1_000) return `${(v / 1_000).toFixed(0)}k`
     return String(Math.round(v))
   }
 
-  const currency = usdToPln ? 'PLN' : 'USD'
+  const displayCurrency = rate ? currency : 'USD'
 
   return (
     <div>
@@ -113,7 +113,7 @@ export default function ValueVsInvested({ history, usdToPln, loading }) {
           width={52}
         />
         <Tooltip
-          content={<CustomTooltip usdToPln={usdToPln} />}
+          content={<CustomTooltip rate={rate} currency={currency} />}
         />
         <Legend
           formatter={(value) => (
@@ -122,8 +122,8 @@ export default function ValueVsInvested({ history, usdToPln, loading }) {
         />
         <Line
           type="monotone"
-          dataKey="valuePLN"
-          name={`Aktualna wartość (${currency})`}
+          dataKey="valueDisp"
+          name={`Aktualna wartość (${displayCurrency})`}
           stroke="var(--gain)"
           strokeWidth={2}
           dot={false}
@@ -132,8 +132,8 @@ export default function ValueVsInvested({ history, usdToPln, loading }) {
         />
         <Line
           type="monotone"
-          dataKey="investedPLN"
-          name={`Zainwestowane (${currency})`}
+          dataKey="investedDisp"
+          name={`Zainwestowane (${displayCurrency})`}
           stroke="var(--accent)"
           strokeWidth={2}
           dot={false}

@@ -211,6 +211,24 @@ Zawiera kluczowe decyzje podjęte podczas budowania aplikacji.
   zwijane/rozwijane kliknięciem. Stan rozwinięcia lokalny w komponencie BrokerSection.
   Tabela renderuje się nawet gdy wszystkie ceny zawiodą (pokazuje „—").
 
+## Waluta wyświetlania (2026-06-08)
+
+- Waluta wyświetlania jest przełączalna: PLN / USD / EUR. Domyślnie PLN (zachowanie historyczne).
+- Wybór zapamiętywany w `localStorage` pod kluczem `asset-stalker.currency`.
+- Menu `<select>` znajduje się w sekcji `.controls` w `App.jsx`, tuż pod przyciskami wczytywania pliku.
+- Stan `displayCurrency` oraz przeliczony kurs `fxRate` (USD→waluta) przechowywane w `App.jsx`.
+- Obliczenia kursów:
+  - PLN: `fx.usdToPln`
+  - USD: `1`
+  - EUR: `1 / fx.eurToUsd` (bo `eurToUsd` to ile USD kosztuje 1 EUR, więc odwrotność = ile EUR za 1 USD)
+  - Gdy kurs niedostępny (null) → `fxRate = null` → komponenty wyświetlają „—"
+- Zasada walutowa niezmieniona: obliczenia wewnętrzne zawsze w USD; przeliczenie wyłącznie przy wyświetlaniu.
+- Do komponentów przekazywana para `rate` (kurs USD→waluta) + `currency` (kod waluty) zamiast dawnego `usdToPln`.
+- Zmienione pliki: `App.jsx`, `SummaryPanel.jsx`, `PortfolioTable.jsx`, `ChartsSection.jsx`,
+  `AllocationPie.jsx`, `ValueVsInvested.jsx`, `DividendsBar.jsx`, `index.css`.
+- Wyjątek: kolumna „Cena zakupu" w `PortfolioTable` nadal pokazuje walutę natywną transakcji — celowa decyzja.
+- Wykres `AllocationAreaOverTime` bez zmian — operuje wyłącznie na procentach.
+
 ## Niezmienniki finansowe (krytyczne — nie łamać)
 
 - **2026-06-03** — Trzy niezmienniki spójności portfela, które muszą zachodzić zawsze:

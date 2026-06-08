@@ -42,6 +42,25 @@ header h1 {
   margin-bottom: 1.5rem;
 }
 
+.currency-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.currency-selector select {
+  background: var(--card, var(--panel));
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
 .file-loader {
   display: flex;
   gap: 0.75rem;

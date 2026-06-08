@@ -26,12 +26,16 @@ const TYPE_LABELS = {
 }
 
 /**
- * Formatuje liczbę jako PLN (zaokrąglenie do groszy, separator tysięcy).
+ * Formatuje kwotę USD na wybraną walutę wyświetlania.
  */
-function fmtPln(usd, usdToPln) {
-  if (usdToPln == null) return `${usd.toFixed(0)} USD`
-  const pln = usd * usdToPln
-  return new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN', maximumFractionDigits: 0 }).format(pln)
+function fmtDisplay(usd, rate, currency) {
+  if (rate == null) return `${usd.toFixed(0)} USD`
+  const val = usd * rate
+  return new Intl.NumberFormat('pl-PL', {
+    style: 'currency',
+    currency: currency,
+    maximumFractionDigits: 0,
+  }).format(val)
 }
 
 /**
@@ -51,23 +55,23 @@ function PieLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent }) {
 }
 
 /**
- * Własny dymek tooltip — pokazuje nazwę, wartość PLN i udział %.
+ * Własny dymek tooltip — pokazuje nazwę, wartość w wybranej walucie i udział %.
  */
-function CustomTooltip({ active, payload, usdToPln }) {
+function CustomTooltip({ active, payload, rate, currency }) {
   if (!active || !payload?.length) return null
   const entry = payload[0]
   return (
     <div className="chart-tooltip">
       <div className="chart-tooltip-title">{entry.name}</div>
       <div className="chart-tooltip-row">
-        <span>{fmtPln(entry.value, usdToPln)}</span>
+        <span>{fmtDisplay(entry.value, rate, currency)}</span>
         <span className="chart-tooltip-pct">{`${(entry.payload.percent * 100).toFixed(1)}%`}</span>
       </div>
     </div>
   )
 }
 
-export default function AllocationPie({ portfolio, usdToPln }) {
+export default function AllocationPie({ portfolio, rate, currency }) {
   if (!portfolio) return null
 
   // Grupuj currentValueUSD pozycji z ceną według typu
@@ -111,7 +115,7 @@ export default function AllocationPie({ portfolio, usdToPln }) {
             <Cell key={entry.type} fill={TYPE_COLORS[entry.type] ?? '#64748b'} />
           ))}
         </Pie>
-        <Tooltip content={<CustomTooltip usdToPln={usdToPln} />} />
+        <Tooltip content={<CustomTooltip rate={rate} currency={currency} />} />
         <Legend
           formatter={(value) => <span style={{ color: 'var(--text)', fontSize: '0.85rem' }}>{value}</span>}
         />

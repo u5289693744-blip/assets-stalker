@@ -2,7 +2,7 @@
  * Panel podsumowania portfela — 5 kart na górze strony.
  *
  * Wszystkie obliczenia finansowe są wykonane w USD i przekazane jako props.
- * Tutaj tylko przeliczamy na PLN (wyłącznie do wyświetlania) i formatujemy.
+ * Tutaj tylko przeliczamy na wybraną walutę (wyłącznie do wyświetlania) i formatujemy.
  *
  * Karty:
  *  1. Łączna wartość — aktualna wartość wszystkiego, co posiadasz
@@ -24,17 +24,17 @@ function fmt(value, decimals = 2) {
   })
 }
 
-function fmtPln(usdValue, usdToPln) {
-  if (usdValue === null || usdValue === undefined || !usdToPln) return '—'
-  return fmt(usdValue * usdToPln) + ' PLN'
+function fmtDisplay(usdValue, rate, currency) {
+  if (usdValue === null || usdValue === undefined || !rate) return '—'
+  return fmt(usdValue * rate) + ' ' + currency
 }
 
-function fmtChange(usdValue, usdToPln) {
-  if (usdValue === null || usdValue === undefined || !usdToPln) return { text: '—', cls: '' }
-  const pln = usdValue * usdToPln
-  const sign = pln >= 0 ? '+' : ''
-  const cls = pln >= 0 ? 'gain' : 'loss'
-  return { text: sign + fmt(pln) + ' PLN', cls }
+function fmtChange(usdValue, rate, currency) {
+  if (usdValue === null || usdValue === undefined || !rate) return { text: '—', cls: '' }
+  const val = usdValue * rate
+  const sign = val >= 0 ? '+' : ''
+  const cls = val >= 0 ? 'gain' : 'loss'
+  return { text: sign + fmt(val) + ' ' + currency, cls }
 }
 
 function fmtCagr(cagrPct) {
@@ -66,7 +66,8 @@ function SummaryCard({ label, value, valueClass, tooltip }) {
  *   totalPnlUSD            — łączny zysk/strata w USD (null gdy brak cen)
  *   totalDayChangeUSD      — zmiana wartości portfela dzisiaj w USD (null gdy brak cen otwarcia)
  *   cagrPct                — roczna stopa zwrotu CAGR w % (null gdy za mało danych)
- *   usdToPln               — kurs USD→PLN z Frankfurter/EBC (null gdy niedostępny)
+ *   rate                   — kurs USD→waluta wyświetlania (null gdy niedostępny)
+ *   currency               — kod waluty wyświetlania ('PLN' | 'USD' | 'EUR')
  */
 export default function SummaryPanel({
   totalPortfolioValueUSD,
@@ -74,22 +75,23 @@ export default function SummaryPanel({
   totalPnlUSD,
   totalDayChangeUSD,
   cagrPct,
-  usdToPln,
+  rate,
+  currency,
 }) {
-  const dayChange = fmtChange(totalDayChangeUSD, usdToPln)
-  const pnl = fmtChange(totalPnlUSD, usdToPln)
+  const dayChange = fmtChange(totalDayChangeUSD, rate, currency)
+  const pnl = fmtChange(totalPnlUSD, rate, currency)
   const cagr = fmtCagr(cagrPct)
 
   return (
     <section className="summary summary-portfolio">
       <SummaryCard
         label="Łączna wartość"
-        value={fmtPln(totalPortfolioValueUSD, usdToPln)}
+        value={fmtDisplay(totalPortfolioValueUSD, rate, currency)}
         tooltip="Aktualna wartość wszystkiego, co posiadasz, przeliczona po dzisiejszym kursie."
       />
       <SummaryCard
         label="Zainwestowane"
-        value={fmtPln(totalInvestedUSD, usdToPln)}
+        value={fmtDisplay(totalInvestedUSD, rate, currency)}
         tooltip="Łączna kwota, którą włożyłeś w posiadane aktywa (według ceny zakupu)."
       />
       <SummaryCard
