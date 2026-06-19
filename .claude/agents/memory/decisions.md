@@ -193,12 +193,53 @@ Zawiera kluczowe decyzje podjęte podczas budowania aplikacji.
 
 ## Tymczasowe wykluczenia i planowane rozszerzenia
 
-- **2026-06-03** — Obligacje (bond) i gotówka (cash) są wykluczone z sum panelu
-  podsumowania (Łączna wartość, Zainwestowane, Zysk/strata, Zmiana dzisiaj, CAGR).
-  Powodem jest brak publicznego cennika i niemożność obliczenia wartości rynkowej.
-  Wycena obligacji (naliczone odsetki kuponowe) zostanie dodana w przyszłości
-  po stronie aplikacji (bez zewnętrznego API). Do czasu implementacji: wartość obligacji
-  i gotówki nie jest wliczana do żadnej sumy panelu — jest to świadoma decyzja, nie błąd.
+- **2026-06-03** → **Zastąpione 2026-06-19:** Obligacje detaliczne PL mają teraz estymowaną
+  wartość — patrz wpis 2026-06-19 w sekcjach API i Decyzje architektoniczne poniżej.
+  Gotówka (cash) nadal wykluczona z sum panelu (brak wyceny).
+
+## Polskie obligacje skarbowe — estymator wartości (2026-06-19)
+
+- **2026-06-19** — Dodano wewnętrzny estymator wartości polskich detalicznych obligacji
+  skarbowych (EDO, COI, TOS, DOS, ROS). Obligacje rozpoznawane po wzorcu tickera
+  `^(EDO|COI|ROS|DOS|TOS)\d{4}$`; typ w CSV pozostaje `bond`.
+
+### API — źródło inflacji
+- **API GUS BDL** (`bdl.stat.gov.pl/api/v1/`) — kwartalne wskaźniki CPI ogółem
+  (analogiczny okres roku poprzedniego = 100). Zmienne: Q1=479365, Q2=479371,
+  Q3=479355, Q4=479340. Średnia z 4 kwartałów = przybliżona roczna inflacja.
+  Przez proxy Vite `/api/gus` → `https://bdl.stat.gov.pl` (CORS).
+- **Fallback:** wbudowana tabelka inflacji 2019-2025, używana gdy GUS nie odpowiada.
+
+### Formuła wyceny
+- Nominał: 100 PLN/szt.
+- Data emisji = data wykupu − lata (wyciągana z tickera, NIE z CSV).
+- **Stała stopa (DOS, TOS):** wartość = 100 × (1+stopa)^pełneLata × (1+stopa×ułamekRoku).
+- **Kapitalizujące indeksowane (EDO, ROS):** wartość = 100 × iloczyn(1+stopa_roku_i)
+  po pełnych latach × (1+stopa_bieżącego×ułamek). Stopa roku N≥2 = inflacja+marża.
+- **COI (wypłaca kupony):** wartość = 100 + odsetki bieżącego okresu rocznego.
+- Po wykupie: wartość końcowa (pełny iloczyn / nominał dla COI).
+
+### Stopy oprocentowania użyte dla obligacji użytkownika
+- **EDO1035:** 1. rok 6,00%, marża 2,00% — ze strony obligacjeskarbowe.pl/edo1035
+- **COI1027:** 1. rok 7,00%, marża 1,25% — ze strony obligacjeskarbowe.pl/coi1027
+- **TOS0326:** stała 6,85% — ze strony obligacjeskarbowe.pl/tos0326 (po wykupie 03.2026)
+- **TOS0627:** stała 6,20% — ze strony obligacjeskarbowe.pl/tos0627
+
+### Wyliczone wartości (na 1 szt., 2026-06-19)
+- TOS0326: 121,99 PLN (wykupiony, 100×1,0685³)
+- TOS0627: 113,13 PLN (aktywny, 2 pełne lata + ułamek)
+- COI1027: 103,54 PLN (100 + odsetki 3. okresu: 4,95%×71,5%)
+- EDO1035: 104,29 PLN (rok 1 w toku: 6%×71,5%)
+
+### Decyzje architektoniczne
+- Nowy moduł `src/lib/prices/polishBonds.js` — rozpoznawanie, tabela stóp, wycena.
+- Nowy moduł `src/lib/prices/fetchInflation.js` — pobieranie inflacji z GUS + fallback.
+- Integracja w `fetchPrices.js` — obligacje polskie liczone przed Yahoo, cena PLN→USD.
+- `buildPortfolio.js` — komentarze zaktualizowane (obligacje PL wchodzą do sum).
+- `buildPortfolioHistory.js` — `PRICEABLE_TYPES` rozszerzony o `bond`.
+- `PortfolioTable.jsx` — dyskretne oznaczenie „szacunek" przy wartości obligacji.
+- `vite.config.js` — nowe proxy `/api/gus` → `bdl.stat.gov.pl`.
+- Zmiana dzienna / cena otwarcia dla obligacji = null (brak rynku dziennego).
 
 ## Decyzje architektoniczne
 

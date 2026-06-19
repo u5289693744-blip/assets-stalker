@@ -94,9 +94,9 @@ function daysSince(dateString, today) {
  *    totalDayChangeUSD      — zmiana wartości portfela dzisiaj (null gdy brak otwartych cen)
  *    cagrPct                — średnioroczny wzrost w % (null gdy za mało danych)
  *
- * UWAGA: obligacje (bond) i gotówka (cash) nie mają ceny rynkowej — są wykluczone ze
- * wszystkich sum panelu podsumowania. Wycenę obligacji (naliczone odsetki) dodamy
- * w przyszłości po stronie aplikacji.
+ * UWAGA: polskie obligacje detaliczne (EDO, COI, TOS, DOS, ROS) mają estymowaną
+ * wartość (naliczone odsetki) obliczaną w fetchPrices.js — wchodzą do sum portfela
+ * jak każde inne aktywo z ceną. Gotówka (cash) i inne obligacje bez wyceny → null.
  */
 export function buildPortfolio(transactions, fx, pricesUSD, openPricesUSD, today) {
   const todayStr = today ?? new Date().toISOString().slice(0, 10)
@@ -237,8 +237,9 @@ export function buildPortfolio(transactions, fx, pricesUSD, openPricesUSD, today
   }
 
   // ─── Sumy panelu podsumowania (tylko pozycje z ceną) ─────────────────────────
-  // Obligacje i gotówka nie mają ceny rynkowej → są wykluczone.
-  // Dzięki temu zachodzi: wartość − zainwestowane = zysk/strata.
+  // Polskie obligacje detaliczne mają estymowaną cenę → wchodzą do sum.
+  // Gotówka i inne pozycje bez ceny → wykluczone.
+  // Zachodzi: wartość − zainwestowane = zysk/strata.
 
   const positionsWithPrice = allPositions.filter((p) => p.currentValueUSD !== null)
 

@@ -25,9 +25,11 @@ function toUSD(amount, currency, fx) {
   return null
 }
 
-// Typy aktywów z ceną rynkową (wyceniane). Obligacje, gotówkę i metale szlachetne
-// (brak publicznej ceny) wykluczamy z sum wartości ORAZ zainwestowania — tak jak panel.
-const PRICEABLE_TYPES = new Set(['stock', 'etf', 'crypto'])
+// Typy aktywów z ceną (wyceniane). Polskie obligacje detaliczne mają estymowaną cenę
+// (naliczone odsetki) → wchodzą do sum. Gotówkę i metale szlachetne wykluczamy.
+// UWAGA: obligacje mają cenę tylko w bieżącym miesiącu (pinowanie z buildPortfolio);
+// w miesiącach historycznych nie mamy historycznych cen obligacji → wartość = 0.
+const PRICEABLE_TYPES = new Set(['stock', 'etf', 'crypto', 'bond'])
 
 /**
  * Generuje listę miesięcy od startMonthKey do endMonthKey (włącznie).

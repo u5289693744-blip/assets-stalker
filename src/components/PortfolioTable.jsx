@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import TransactionHistoryModal from './TransactionHistoryModal.jsx'
+import { isPolishRetailBond } from '../lib/prices/polishBonds.js'
 
 /**
  * Tabela portfela pogrupowana po brokerze.
@@ -272,7 +273,14 @@ function BrokerSection({ brokerData, rate, currency, dividendsByTicker, transact
                     </td>
                     <td className="num">{p.holdingDays}</td>
                     <td className="num">{fmtDisplay(p.costBasisUSD, rate, currency)}</td>
-                    <td className="num">{fmtDisplay(p.currentValueUSD, rate, currency)}</td>
+                    <td className="num">
+                      {fmtDisplay(p.currentValueUSD, rate, currency)}
+                      {p.currentValueUSD !== null && isPolishRetailBond(p.ticker) && (
+                        <span className="estimate-badge" title="Wartość oszacowana na podstawie naliczonych odsetek — nie jest to cena rynkowa">
+                          {' '}szacunek
+                        </span>
+                      )}
+                    </td>
                     <PnlCell pnlUSD={p.pnlUSD} rate={rate} currency={currency} />
                     <PnlPctCell pnlPct={p.pnlPct} />
                     <td className="num">

@@ -2,10 +2,10 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // Konfiguracja Vite — narzedzia, ktore uruchamiaja aplikacje lokalnie w przegladarce.
-// Proxy dla Yahoo Finance: Yahoo nie wysyla naglowkow CORS, wiec przeglądarka blokuje
-// bezposrednie zapytania. Serwer deweloperski Vite posredniczy jako proxy —
-// z punktu widzenia przegladarki to lokalne zapytanie (bez CORS).
-// (CoinGecko i Frankfurter sa wolane bezposrednio — wysylaja naglowki CORS.)
+// Proxy dla Yahoo Finance i GUS: oba serwery nie wysylaja naglowkow CORS,
+// wiec przeglądarka blokuje bezposrednie zapytania. Serwer deweloperski Vite
+// posredniczy jako proxy — z punktu widzenia przegladarki to lokalne zapytanie (bez CORS).
+// (Frankfurter jest wolany bezposrednio — wysyla naglowki CORS.)
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -26,6 +26,15 @@ export default defineConfig({
             )
           })
         },
+      },
+      // Proxy dla API GUS (Glowny Urzad Statystyczny) — dane o inflacji.
+      // GUS nie wysyla naglowkow CORS, wiec zapytania z przegladarki sa blokowane.
+      // /api/gus/api/v1/... → https://bdl.stat.gov.pl/api/v1/...
+      '/api/gus': {
+        target: 'https://bdl.stat.gov.pl',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/api\/gus/, ''),
       },
     },
   },

@@ -297,6 +297,15 @@ header h1 {
 .gain { color: var(--gain); }
 .loss { color: var(--sell); }
 
+/* ─── Oznaczenie szacunkowej wartości (obligacje) ─────────────── */
+.estimate-badge {
+  font-size: 0.65rem;
+  color: var(--muted);
+  font-style: italic;
+  opacity: 0.8;
+  vertical-align: super;
+}
+
 /* ─── Pasek postępu pobierania cen ─────────────────────────────── */
 .price-progress {
   background: var(--panel);

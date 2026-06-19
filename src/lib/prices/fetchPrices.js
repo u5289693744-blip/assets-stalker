@@ -9,8 +9,10 @@
  *      (/api/yahoo → https://query1.finance.yahoo.com). Jedno źródło dla wszystkich
  *      rodzajów aktywów — daje cenę bieżącą oraz cenę otwarcia dnia.
  *  - Kursy walut (FX): Frankfurter (dane EBC) — kurs USD→PLN i EUR→USD.
- *  - Obligacje (bond), gotówka (cash), metale (precious_metal): brak publicznego
- *      cennika → null.
+ *  - Polskie obligacje skarbowe (EDO, COI, TOS, DOS, ROS): estymata wartości
+ *      na podstawie naliczonych odsetek + inflacji z GUS. Cena w PLN, przeliczona
+ *      na USD przez kurs usdToPln. Cena otwarcia = null (brak rynku dziennego).
+ *  - Gotówka (cash), metale (precious_metal): brak publicznego cennika → null.
  *
  * Dlaczego Yahoo dla wszystkiego:
  *  - Stooq zablokował darmowe dane historyczne (wymaga klucza API).
@@ -23,6 +25,9 @@
  *  - europejskie ETF-y: <TICKER>.DE (notowane w EUR — przeliczane na USD)
  *  - krypto: <TICKER>-USD (BTC-USD, ETH-USD, SOL-USD)
  */
+
+import { isPolishRetailBond, estimateBondValuePLN } from './polishBonds.js'
+import { fetchInflation } from './fetchInflation.js'
 
 // Europejskie ETF-y → symbol Yahoo (notowane na XETRA, w EUR).
 const YAHOO_ETF_SYMBOLS = {
@@ -130,23 +135,31 @@ export async function fetchAllPrices(positions, onProgress, onDone) {
   const pricesUSD = new Map()
   const openPricesUSD = new Map()
 
-  // Unikalne tickery; rozdziel na te z ceną (Yahoo) i bez ceny.
+  // Unikalne tickery; rozdziel na:
+  //  - priceable: Yahoo Finance (akcje, ETF-y, krypto)
+  //  - polishBonds: polskie obligacje detaliczne (estymata wewnętrzna)
+  //  - unpriceable: gotówka, metale, inne obligacje bez wyceny
   const priceable = []
+  const polishBonds = []
   const seen = new Set()
   for (const { ticker, type } of positions) {
     if (seen.has(ticker)) continue
     seen.add(ticker)
-    const symbol = yahooSymbol(ticker, type)
-    if (symbol) {
-      priceable.push({ ticker, symbol })
+    if (isPolishRetailBond(ticker)) {
+      polishBonds.push({ ticker })
     } else {
-      // obligacje, gotówka, metale — brak publicznej ceny
-      pricesUSD.set(ticker, null)
-      openPricesUSD.set(ticker, null)
+      const symbol = yahooSymbol(ticker, type)
+      if (symbol) {
+        priceable.push({ ticker, symbol })
+      } else {
+        // gotówka, metale, inne — brak publicznej ceny
+        pricesUSD.set(ticker, null)
+        openPricesUSD.set(ticker, null)
+      }
     }
   }
 
-  const total = priceable.length
+  const total = priceable.length + polishBonds.length
   let done = 0
   let succeeded = 0
   let failed = 0
@@ -156,10 +169,42 @@ export async function fetchAllPrices(positions, onProgress, onDone) {
     return null
   }
 
-  // Kurs FX — potrzebny do przeliczenia ETF-ów z EUR na USD.
+  // Kurs FX — potrzebny do przeliczenia ETF-ów z EUR na USD i obligacji z PLN na USD.
   const fx = await fetchFxRates()
 
-  // Pobierz ceny wszystkich aktywów równolegle, aktualizując postęp po każdym.
+  // ── Polskie obligacje: pobierz inflację (raz) i oblicz wartość każdej ──────
+  // Inflacja potrzebna jest tylko dla obligacji indeksowanych (EDO, COI, ROS),
+  // ale pobieramy ją zawsze gdy są jakiekolwiek polskie obligacje w portfelu.
+  if (polishBonds.length > 0) {
+    let inflation = {}
+    try {
+      const inflResult = await fetchInflation()
+      inflation = inflResult?.data ?? {}
+    } catch {
+      console.warn('[fetchAllPrices] Nie udało się pobrać inflacji — użyto fallbacku wewnętrznego')
+    }
+
+    const usdToPln = fx?.usdToPln
+    for (const { ticker } of polishBonds) {
+      const result = estimateBondValuePLN(ticker, inflation)
+      if (result && result.valuePLN !== null && usdToPln) {
+        // Przelicz wartość 1 sztuki z PLN na USD
+        const priceUSD = result.valuePLN / usdToPln
+        pricesUSD.set(ticker, priceUSD)
+      } else {
+        // Brak kursu FX lub nie udało się obliczyć — traktuj jak brak ceny
+        pricesUSD.set(ticker, null)
+      }
+      // Obligacje nie mają ceny otwarcia (brak rynku dziennego)
+      openPricesUSD.set(ticker, null)
+      done++
+      if (pricesUSD.get(ticker) !== null) succeeded++
+      else failed++
+      onProgress(done, total, succeeded, failed)
+    }
+  }
+
+  // ── Yahoo Finance: pobierz ceny akcji, ETF-ów i krypto ───────────────────
   const fetches = priceable.map(async ({ ticker, symbol }) => {
     const quote = await fetchYahooQuote(symbol, fx?.eurToUsd ?? null)
     const priceUSD = quote?.priceUSD ?? null
